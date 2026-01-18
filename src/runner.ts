@@ -82,7 +82,7 @@ function runClaudeCode(prompt: string, repoPath: string): Promise<{ success: boo
     console.log(`Starting Claude Code in ${repoPath}`);
     console.log(`${'='.repeat(60)}\n`);
 
-    const claude = spawn('claude', ['-p', prompt], {
+    const claude = spawn('claude', ['-p', '--dangerously-skip-permissions', prompt], {
       cwd: repoPath,
       stdio: ['inherit', 'pipe', 'pipe'],
       env: { ...process.env },
