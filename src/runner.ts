@@ -15,6 +15,17 @@ interface LinearApiResponse {
   errors?: Array<{ message: string }>;
 }
 
+interface LinearUpdateResponse {
+  data?: {
+    issueUpdate?: {
+      success: boolean;
+    };
+  };
+  errors?: Array<{ message: string }>;
+}
+
+const LINEAR_DONE_STATE_ID = '0a130423-879b-4391-adc9-efce12f2e425';
+
 async function fetchLinearTicket(ticketId: string): Promise<LinearTicket> {
   if (!LINEAR_API_KEY) {
     throw new Error('LINEAR_API_KEY environment variable is required');
@@ -51,6 +62,40 @@ async function fetchLinearTicket(ticketId: string): Promise<LinearTicket> {
   }
 
   return data.data.issue;
+}
+
+async function markTicketDone(ticketId: string): Promise<void> {
+  if (!LINEAR_API_KEY) {
+    throw new Error('LINEAR_API_KEY environment variable is required');
+  }
+
+  const response = await fetch('https://api.linear.app/graphql', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': LINEAR_API_KEY,
+    },
+    body: JSON.stringify({
+      query: `
+        mutation UpdateIssue($id: String!, $stateId: String!) {
+          issueUpdate(id: $id, input: { stateId: $stateId }) {
+            success
+          }
+        }
+      `,
+      variables: { id: ticketId, stateId: LINEAR_DONE_STATE_ID },
+    }),
+  });
+
+  const data = (await response.json()) as LinearUpdateResponse;
+
+  if (data.errors) {
+    throw new Error(`Linear API error: ${data.errors[0].message}`);
+  }
+
+  if (!data.data?.issueUpdate?.success) {
+    throw new Error(`Failed to update ticket ${ticketId}`);
+  }
 }
 
 function buildPrompt(ticket: LinearTicket, repoPath: string): string {
@@ -149,6 +194,9 @@ async function main() {
     console.log(`\n${'='.repeat(60)}`);
     if (result.success) {
       console.log(`✓ SUCCESS: Claude Code completed successfully`);
+      console.log(`Marking ${ticketId} as Done...`);
+      await markTicketDone(ticketId);
+      console.log(`✓ Ticket ${ticketId} marked as Done`);
     } else {
       console.log(`✗ FAILURE: Claude Code exited with errors`);
     }
