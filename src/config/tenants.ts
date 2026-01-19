@@ -1,13 +1,20 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+export type NotificationType = 'email' | 'slack' | 'discord' | 'sms' | 'whatsapp' | 'gchat';
+
+export interface NotificationConfig {
+  type: NotificationType;
+  config: Record<string, string>;
+}
+
 export interface TenantConfig {
   name: string;
   linearTeamId: string;
   repoPath: string;
   maxConcurrentAgents: number;
   githubRepo: string;
-  slackWebhook?: string;
+  notifications?: NotificationConfig[];
 }
 
 interface TenantsFile {

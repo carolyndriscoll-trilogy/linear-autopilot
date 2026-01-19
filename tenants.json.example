@@ -6,14 +6,43 @@
       "repoPath": "/Users/carolyndriscoll/test-todo-app",
       "maxConcurrentAgents": 2,
       "githubRepo": "carolyndriscoll/test-todo-app",
-      "slackWebhook": "https://hooks.slack.com/services/xxx/yyy/zzz"
+      "notifications": [
+        {
+          "type": "slack",
+          "config": {
+            "webhookUrl": "https://hooks.slack.com/services/xxx/yyy/zzz",
+            "channel": "#autopilot-alerts"
+          }
+        },
+        {
+          "type": "email",
+          "config": {
+            "to": "team@example.com",
+            "from": "autopilot@example.com"
+          }
+        }
+      ]
     },
     {
       "name": "Another Project",
       "linearTeamId": "another-team-uuid",
       "repoPath": "/path/to/another/repo",
       "maxConcurrentAgents": 1,
-      "githubRepo": "org/another-repo"
+      "githubRepo": "org/another-repo",
+      "notifications": [
+        {
+          "type": "discord",
+          "config": {
+            "webhookUrl": "https://discord.com/api/webhooks/xxx/yyy"
+          }
+        },
+        {
+          "type": "gchat",
+          "config": {
+            "webhookUrl": "https://chat.googleapis.com/v1/spaces/xxx/messages?key=yyy"
+          }
+        }
+      ]
     }
   ]
 }
