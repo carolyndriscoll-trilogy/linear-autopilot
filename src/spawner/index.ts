@@ -13,6 +13,7 @@ import {
   createPrCreatedEvent,
 } from '../notifications';
 import { logger } from '../logger';
+import { validate, formatValidationSummary } from '../validation';
 
 const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
@@ -144,7 +145,7 @@ class Spawner {
       const duration = Date.now() - startTime;
 
       if (success) {
-        await this.handleSuccess(ticket, tenant, branchName, duration);
+        await this.handleSuccess(ticket, tenant, item, branchName, duration);
       } else {
         await this.handleFailure(ticket, tenant, item, branchName, 'Claude Code exited with errors');
       }
@@ -186,21 +187,43 @@ class Spawner {
   private async handleSuccess(
     ticket: LinearTicket,
     tenant: TenantConfig,
+    item: QueuedTicket,
     branchName: string,
     duration: number
   ): Promise<void> {
-    logger.info('Agent completed successfully', { ticketId: ticket.identifier, tenant: tenant.name });
+    logger.info('Agent completed, running validation', { ticketId: ticket.identifier, tenant: tenant.name });
 
     try {
+      // Run validation before creating PR
+      const validation = await validate(tenant.repoPath);
+
+      if (!validation.passed) {
+        const validationSummary = formatValidationSummary(validation);
+        logger.warn('Validation failed', { ticketId: ticket.identifier, results: validation.results.map(r => ({ name: r.name, passed: r.passed })) });
+
+        // Fail the ticket with validation error
+        await this.handleFailure(
+          ticket,
+          tenant,
+          item,
+          branchName,
+          `Validation failed:\n${validationSummary}`
+        );
+        return;
+      }
+
+      logger.info('Validation passed', { ticketId: ticket.identifier, duration: validation.totalDuration });
+
       // Push branch and create PR
-      const prUrl = await this.createPullRequest(tenant, branchName, ticket);
+      const prUrl = await this.createPullRequest(tenant, branchName, ticket, validation);
 
       if (prUrl) {
         // Notify: PR created
         await notify(createPrCreatedEvent(ticket, tenant, branchName, prUrl));
 
-        // Add comment to Linear ticket with PR link
-        await addComment(ticket, `✅ Implementation complete!\n\nPR: ${prUrl}`);
+        // Add comment to Linear ticket with PR link and validation summary
+        const validationSummary = formatValidationSummary(validation);
+        await addComment(ticket, `✅ Implementation complete!\n\nPR: ${prUrl}\n\n${validationSummary}`);
 
         // Move to In Review
         await updateTicketStatus(ticket, 'In Review');
@@ -278,7 +301,8 @@ class Spawner {
   private async createPullRequest(
     tenant: TenantConfig,
     branchName: string,
-    ticket: LinearTicket
+    ticket: LinearTicket,
+    validation?: import('../validation').ValidationSummary
   ): Promise<string | null> {
     try {
       // Check if there are commits on the branch
@@ -298,10 +322,18 @@ class Spawner {
         stdio: 'pipe',
       });
 
+      // Build validation section if available
+      let validationSection = '';
+      if (validation) {
+        const checks = validation.results.map(r => `- ${r.passed ? '✅' : '❌'} ${r.name}`).join('\n');
+        validationSection = `\n\n### Validation\n${checks}`;
+      }
+
       // Create PR using gh CLI
       const prBody = `## ${ticket.title}
 
 ${ticket.description || 'No description provided.'}
+${validationSection}
 
 ---
 Linear: ${ticket.identifier}
