@@ -1,5 +1,5 @@
 import { LinearTicket } from './linear';
-import { getMemory, formatMemoryForPrompt, RepoMemory } from './memory';
+import { getMemory, formatMemoryForPrompt } from './memory';
 
 export interface PromptOptions {
   ticket: LinearTicket;

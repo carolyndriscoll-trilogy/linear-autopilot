@@ -80,7 +80,7 @@ export function createDashboardRouter(): Router {
 
     // Aggregate costs across all tenants
     let totalCost = 0;
-    let totalTokens = { input: 0, output: 0 };
+    const totalTokens = { input: 0, output: 0 };
 
     for (const tenant of tenants) {
       const summary = getCostSummary(tenant.repoPath);
@@ -226,9 +226,10 @@ export function createDashboardRouter(): Router {
 
     <div class="section">
       <h2>Active Agents</h2>
-      ${agents.length === 0
-        ? '<p class="empty">No active agents</p>'
-        : `<table>
+      ${
+        agents.length === 0
+          ? '<p class="empty">No active agents</p>'
+          : `<table>
           <thead>
             <tr>
               <th>Ticket</th>
@@ -238,14 +239,18 @@ export function createDashboardRouter(): Router {
             </tr>
           </thead>
           <tbody>
-            ${agents.map(agent => `
+            ${agents
+              .map(
+                (agent) => `
               <tr>
                 <td><span class="badge badge-blue">${agent.ticket.identifier}</span></td>
                 <td>${agent.ticket.title}</td>
                 <td>${agent.tenant.name}</td>
                 <td>${formatDuration(now - agent.startedAt.getTime())}</td>
               </tr>
-            `).join('')}
+            `
+              )
+              .join('')}
           </tbody>
         </table>`
       }
@@ -253,9 +258,10 @@ export function createDashboardRouter(): Router {
 
     <div class="section">
       <h2>Recent Completions</h2>
-      ${completions.length === 0
-        ? '<p class="empty">No recent completions</p>'
-        : `<table>
+      ${
+        completions.length === 0
+          ? '<p class="empty">No recent completions</p>'
+          : `<table>
           <thead>
             <tr>
               <th>Ticket</th>
@@ -266,7 +272,11 @@ export function createDashboardRouter(): Router {
             </tr>
           </thead>
           <tbody>
-            ${completions.slice().reverse().map(c => `
+            ${completions
+              .slice()
+              .reverse()
+              .map(
+                (c) => `
               <tr>
                 <td><span class="badge badge-green">${c.ticketId}</span></td>
                 <td>${c.tenant}</td>
@@ -274,7 +284,9 @@ export function createDashboardRouter(): Router {
                 <td>${c.prUrl ? `<a href="${c.prUrl}" target="_blank">View PR</a>` : '-'}</td>
                 <td>${new Date(c.completedAt).toLocaleString()}</td>
               </tr>
-            `).join('')}
+            `
+              )
+              .join('')}
           </tbody>
         </table>`
       }
