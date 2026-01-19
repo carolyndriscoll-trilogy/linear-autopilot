@@ -3,3 +3,4 @@ dist
 .env
 tenants.json
 data/
+coverage

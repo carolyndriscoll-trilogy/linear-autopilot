@@ -3,6 +3,9 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { slackProvider } from '../../src/notifications/providers/slack';
 import { discordProvider } from '../../src/notifications/providers/discord';
 import { emailProvider } from '../../src/notifications/providers/email';
+import { gchatProvider } from '../../src/notifications/providers/gchat';
+import { smsProvider } from '../../src/notifications/providers/sms';
+import { whatsappProvider } from '../../src/notifications/providers/whatsapp';
 import {
   formatPlain,
   formatMarkdown,
@@ -332,6 +335,260 @@ describe('Notification Providers', () => {
           provider: 'resend',
         })
       ).rejects.toThrow('Resend API key is required');
+    });
+
+    it('should send email via SendGrid API', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('', { status: 202 }));
+
+      const event = createAgentCompletedEvent();
+      await emailProvider.send(event, {
+        to: 'test@example.com',
+        apiKey: 'test-api-key',
+        provider: 'sendgrid',
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.sendgrid.com/v3/mail/send',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-api-key',
+          }),
+        })
+      );
+    });
+
+    it('should throw error if SendGrid API key is missing', async () => {
+      const event = createAgentCompletedEvent();
+
+      await expect(
+        emailProvider.send(event, {
+          to: 'test@example.com',
+          provider: 'sendgrid',
+        })
+      ).rejects.toThrow('SendGrid API key is required');
+    });
+
+    it('should throw error when SendGrid API fails', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('Forbidden', { status: 403 }));
+
+      const event = createAgentCompletedEvent();
+
+      await expect(
+        emailProvider.send(event, {
+          to: 'test@example.com',
+          apiKey: 'test-key',
+          provider: 'sendgrid',
+        })
+      ).rejects.toThrow('SendGrid API failed');
+    });
+  });
+
+  describe('gchatProvider', () => {
+    const webhookUrl = 'https://chat.googleapis.com/v1/spaces/xxx/messages';
+
+    it('should have correct name', () => {
+      expect(gchatProvider.name).toBe('gchat');
+    });
+
+    it('should send a message to Google Chat webhook', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+      const event = createAgentCompletedEvent();
+      await gchatProvider.send(event, { webhookUrl });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        webhookUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+
+    it('should throw error if webhookUrl is missing', async () => {
+      const event = createAgentStartedEvent();
+
+      await expect(gchatProvider.send(event, {})).rejects.toThrow(
+        'Google Chat webhookUrl is required'
+      );
+    });
+
+    it('should throw error on non-ok response', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response('Error', { status: 500, statusText: 'Server Error' })
+      );
+
+      const event = createAgentStartedEvent();
+
+      await expect(gchatProvider.send(event, { webhookUrl })).rejects.toThrow(
+        'Google Chat webhook failed'
+      );
+    });
+  });
+
+  describe('smsProvider', () => {
+    const smsConfig = {
+      accountSid: 'AC123',
+      authToken: 'token123',
+      from: '+1234567890',
+      to: '+0987654321',
+    };
+
+    it('should have correct name', () => {
+      expect(smsProvider.name).toBe('sms');
+    });
+
+    it('should send SMS via Twilio API', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 })
+      );
+
+      const event = createAgentCompletedEvent();
+      await smsProvider.send(event, smsConfig);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `https://api.twilio.com/2010-04-01/Accounts/${smsConfig.accountSid}/Messages.json`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/x-www-form-urlencoded',
+          }),
+        })
+      );
+    });
+
+    it('should throw error if accountSid or authToken is missing', async () => {
+      const event = createAgentStartedEvent();
+
+      await expect(smsProvider.send(event, { from: '+1', to: '+2' })).rejects.toThrow(
+        'Twilio accountSid and authToken are required'
+      );
+    });
+
+    it('should throw error if from or to is missing', async () => {
+      const event = createAgentStartedEvent();
+
+      await expect(
+        smsProvider.send(event, { accountSid: 'AC123', authToken: 'token' })
+      ).rejects.toThrow('SMS "from" and "to" phone numbers are required');
+    });
+
+    it('should throw error on non-ok response', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('Invalid', { status: 400 }));
+
+      const event = createAgentStartedEvent();
+
+      await expect(smsProvider.send(event, smsConfig)).rejects.toThrow('Twilio SMS failed');
+    });
+
+    it('should truncate long messages to 160 characters', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 })
+      );
+
+      // Create an event that would generate a long message
+      const event = createAgentFailedEvent(
+        createMockTicket({ title: 'A'.repeat(200) }),
+        createMockTenant(),
+        'feature/test',
+        'B'.repeat(200),
+        1,
+        3
+      );
+      await smsProvider.send(event, smsConfig);
+
+      expect(mockFetch).toHaveBeenCalled();
+      const call = mockFetch.mock.calls[0];
+      const body = call[1]?.body as string;
+      // Body is URL encoded, check it was truncated
+      expect(body.length).toBeLessThan(500); // A very long message would be much larger
+    });
+  });
+
+  describe('whatsappProvider', () => {
+    const whatsappConfig = {
+      accountSid: 'AC123',
+      authToken: 'token123',
+      from: '+1234567890',
+      to: '+0987654321',
+    };
+
+    it('should have correct name', () => {
+      expect(whatsappProvider.name).toBe('whatsapp');
+    });
+
+    it('should send WhatsApp message via Twilio API', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 })
+      );
+
+      const event = createAgentCompletedEvent();
+      await whatsappProvider.send(event, whatsappConfig);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `https://api.twilio.com/2010-04-01/Accounts/${whatsappConfig.accountSid}/Messages.json`,
+        expect.objectContaining({
+          method: 'POST',
+        })
+      );
+    });
+
+    it('should add whatsapp: prefix to numbers if not present', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 })
+      );
+
+      const event = createAgentCompletedEvent();
+      await whatsappProvider.send(event, whatsappConfig);
+
+      const call = mockFetch.mock.calls[0];
+      const body = call[1]?.body as string;
+      expect(body).toContain('whatsapp%3A%2B1234567890'); // URL encoded whatsapp:+1234567890
+    });
+
+    it('should not double-prefix numbers that already have whatsapp:', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 })
+      );
+
+      const event = createAgentCompletedEvent();
+      await whatsappProvider.send(event, {
+        ...whatsappConfig,
+        from: 'whatsapp:+1234567890',
+        to: 'whatsapp:+0987654321',
+      });
+
+      const call = mockFetch.mock.calls[0];
+      const body = call[1]?.body as string;
+      // Should have exactly one whatsapp: prefix, not double
+      expect(body).not.toContain('whatsapp%3Awhatsapp');
+    });
+
+    it('should throw error if accountSid or authToken is missing', async () => {
+      const event = createAgentStartedEvent();
+
+      await expect(whatsappProvider.send(event, { from: '+1', to: '+2' })).rejects.toThrow(
+        'Twilio accountSid and authToken are required'
+      );
+    });
+
+    it('should throw error if from or to is missing', async () => {
+      const event = createAgentStartedEvent();
+
+      await expect(
+        whatsappProvider.send(event, { accountSid: 'AC123', authToken: 'token' })
+      ).rejects.toThrow('WhatsApp "from" and "to" numbers are required');
+    });
+
+    it('should throw error on non-ok response', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('Invalid', { status: 400 }));
+
+      const event = createAgentStartedEvent();
+
+      await expect(whatsappProvider.send(event, whatsappConfig)).rejects.toThrow(
+        'Twilio WhatsApp failed'
+      );
     });
   });
 });
