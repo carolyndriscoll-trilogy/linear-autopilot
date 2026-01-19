@@ -3,12 +3,18 @@ export interface LinearState {
   name: string;
 }
 
+export interface LinearTeam {
+  id: string;
+  name: string;
+}
+
 export interface LinearTicket {
   id: string;
   identifier: string;
   title: string;
   description: string | null;
   state: LinearState;
+  team: LinearTeam;
 }
 
 export interface LinearComment {

@@ -1,6 +1,5 @@
 export interface Config {
   linearApiKey: string;
-  linearTeamId: string;
   defaultRepoPath?: string;
 }
 
@@ -25,7 +24,6 @@ export function getConfig(): Config {
 
   cachedConfig = {
     linearApiKey: getRequiredEnv('LINEAR_API_KEY'),
-    linearTeamId: getRequiredEnv('LINEAR_TEAM_ID'),
     defaultRepoPath: getOptionalEnv('DEFAULT_REPO_PATH'),
   };
 

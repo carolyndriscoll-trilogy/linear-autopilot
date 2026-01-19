@@ -1,9 +1,10 @@
 import { getConfig } from '../config';
 import { LinearState, LinearStatesResponse } from './types';
 
-let statesCache: Map<string, string> | null = null;
+// Cache states per team: teamId -> (stateName -> stateId)
+const statesCache = new Map<string, Map<string, string>>();
 
-async function fetchStates(): Promise<Map<string, string>> {
+async function fetchStatesForTeam(teamId: string): Promise<Map<string, string>> {
   const config = getConfig();
 
   const response = await fetch('https://api.linear.app/graphql', {
@@ -25,7 +26,7 @@ async function fetchStates(): Promise<Map<string, string>> {
           }
         }
       `,
-      variables: { teamId: config.linearTeamId },
+      variables: { teamId },
     }),
   });
 
@@ -36,7 +37,7 @@ async function fetchStates(): Promise<Map<string, string>> {
   }
 
   if (!data.data?.team?.states?.nodes) {
-    throw new Error('Failed to fetch states from Linear');
+    throw new Error(`Failed to fetch states for team ${teamId}`);
   }
 
   const stateMap = new Map<string, string>();
@@ -47,24 +48,30 @@ async function fetchStates(): Promise<Map<string, string>> {
   return stateMap;
 }
 
-export async function getStateId(stateName: string): Promise<string> {
-  if (!statesCache) {
-    statesCache = await fetchStates();
+export async function getStateId(teamId: string, stateName: string): Promise<string> {
+  let teamStates = statesCache.get(teamId);
+
+  if (!teamStates) {
+    teamStates = await fetchStatesForTeam(teamId);
+    statesCache.set(teamId, teamStates);
   }
 
-  const stateId = statesCache.get(stateName.toLowerCase());
+  const stateId = teamStates.get(stateName.toLowerCase());
   if (!stateId) {
-    const available = Array.from(statesCache.keys()).join(', ');
-    throw new Error(`State "${stateName}" not found. Available: ${available}`);
+    const available = Array.from(teamStates.keys()).join(', ');
+    throw new Error(`State "${stateName}" not found in team. Available: ${available}`);
   }
 
   return stateId;
 }
 
-export async function getAllStates(): Promise<LinearState[]> {
-  if (!statesCache) {
-    statesCache = await fetchStates();
+export async function getAllStates(teamId: string): Promise<LinearState[]> {
+  let teamStates = statesCache.get(teamId);
+
+  if (!teamStates) {
+    teamStates = await fetchStatesForTeam(teamId);
+    statesCache.set(teamId, teamStates);
   }
 
-  return Array.from(statesCache.entries()).map(([name, id]) => ({ id, name }));
+  return Array.from(teamStates.entries()).map(([name, id]) => ({ id, name }));
 }

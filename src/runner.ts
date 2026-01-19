@@ -51,8 +51,8 @@ async function main() {
     console.log(`\n${'='.repeat(60)}`);
     if (success) {
       console.log(`✓ Claude Code completed`);
-      await updateTicketStatus(ticketId, 'Done');
-      console.log(`✓ Marked ${ticketId} as Done`);
+      await updateTicketStatus(ticket, 'Done');
+      console.log(`✓ Marked ${ticket.identifier} as Done`);
     } else {
       console.log(`✗ Claude Code failed`);
     }

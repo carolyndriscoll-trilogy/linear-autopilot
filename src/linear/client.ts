@@ -34,6 +34,10 @@ export async function fetchTicket(ticketId: string): Promise<LinearTicket> {
             id
             name
           }
+          team {
+            id
+            name
+          }
         }
       }
     `,
@@ -51,8 +55,8 @@ export async function fetchTicket(ticketId: string): Promise<LinearTicket> {
   return data.data.issue;
 }
 
-export async function updateTicketStatus(ticketId: string, stateName: string): Promise<void> {
-  const stateId = await getStateId(stateName);
+export async function updateTicketStatus(ticket: LinearTicket, stateName: string): Promise<void> {
+  const stateId = await getStateId(ticket.team.id, stateName);
 
   const data = await graphql<LinearMutationResponse>(
     `
@@ -62,7 +66,7 @@ export async function updateTicketStatus(ticketId: string, stateName: string): P
         }
       }
     `,
-    { id: ticketId, stateId }
+    { id: ticket.identifier, stateId }
   );
 
   if (data.errors) {
@@ -70,13 +74,11 @@ export async function updateTicketStatus(ticketId: string, stateName: string): P
   }
 
   if (!data.data?.issueUpdate?.success) {
-    throw new Error(`Failed to update ticket ${ticketId} to ${stateName}`);
+    throw new Error(`Failed to update ${ticket.identifier} to ${stateName}`);
   }
 }
 
-export async function addComment(ticketId: string, body: string): Promise<void> {
-  const ticket = await fetchTicket(ticketId);
-
+export async function addComment(ticket: LinearTicket, body: string): Promise<void> {
   const data = await graphql<LinearMutationResponse>(
     `
       mutation CreateComment($issueId: String!, $body: String!) {
@@ -93,13 +95,11 @@ export async function addComment(ticketId: string, body: string): Promise<void> 
   }
 
   if (!data.data?.commentCreate?.success) {
-    throw new Error(`Failed to add comment to ${ticketId}`);
+    throw new Error(`Failed to add comment to ${ticket.identifier}`);
   }
 }
 
-export async function createLabel(name: string, color: string): Promise<string> {
-  const config = getConfig();
-
+export async function createLabel(teamId: string, name: string, color: string): Promise<string> {
   const data = await graphql<LinearMutationResponse>(
     `
       mutation CreateLabel($teamId: String!, $name: String!, $color: String!) {
@@ -111,7 +111,7 @@ export async function createLabel(name: string, color: string): Promise<string> 
         }
       }
     `,
-    { teamId: config.linearTeamId, name, color }
+    { teamId, name, color }
   );
 
   if (data.errors) {
