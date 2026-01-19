@@ -137,10 +137,21 @@ src/
 Run tests:
 
 ```bash
-npm test                 # Run all tests
-npm test -- --watch      # Watch mode
-npm test -- --coverage   # With coverage report
+npm test                    # Run all tests
+npm run test:watch          # Watch mode
+npm run test:coverage       # With coverage report
 ```
+
+### Coverage Requirements
+
+All PRs must maintain a minimum **70% coverage** threshold for:
+
+- Statements
+- Branches
+- Functions
+- Lines
+
+The CI will fail if coverage drops below this threshold.
 
 ## Code Style
 

@@ -116,30 +116,30 @@ Open http://localhost:3000/dashboard to view the dashboard.
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LINEAR_API_KEY` | Linear API key (required) | - |
-| `LINEAR_WEBHOOK_SECRET` | Webhook signature secret | - |
-| `LINEAR_POLLING_INTERVAL_MS` | Polling interval (0 = webhooks only) | `0` |
-| `GITHUB_TOKEN` | GitHub token for PR creation | - |
-| `PORT` | Server port | `3000` |
-| `LOG_LEVEL` | Log level (debug/info/warn/error) | `info` |
-| `LOG_FILE` | Optional log file path | - |
-| `COVERAGE_THRESHOLD` | Minimum coverage % required | `0` |
-| `AGENT_STUCK_THRESHOLD_MS` | Stuck detection threshold | `600000` |
+| Variable                     | Description                          | Default  |
+| ---------------------------- | ------------------------------------ | -------- |
+| `LINEAR_API_KEY`             | Linear API key (required)            | -        |
+| `LINEAR_WEBHOOK_SECRET`      | Webhook signature secret             | -        |
+| `LINEAR_POLLING_INTERVAL_MS` | Polling interval (0 = webhooks only) | `0`      |
+| `GITHUB_TOKEN`               | GitHub token for PR creation         | -        |
+| `PORT`                       | Server port                          | `3000`   |
+| `LOG_LEVEL`                  | Log level (debug/info/warn/error)    | `info`   |
+| `LOG_FILE`                   | Optional log file path               | -        |
+| `COVERAGE_THRESHOLD`         | Minimum coverage % required          | `0`      |
+| `AGENT_STUCK_THRESHOLD_MS`   | Stuck detection threshold            | `600000` |
 
 ### Tenant Configuration
 
 Each tenant in `tenants.json` supports:
 
-| Field | Description |
-|-------|-------------|
-| `name` | Display name for the tenant |
-| `linearTeamId` | Linear team ID |
-| `repoPath` | Absolute path to the repository |
+| Field                 | Description                         |
+| --------------------- | ----------------------------------- |
+| `name`                | Display name for the tenant         |
+| `linearTeamId`        | Linear team ID                      |
+| `repoPath`            | Absolute path to the repository     |
 | `maxConcurrentAgents` | Max parallel agents for this tenant |
-| `githubRepo` | GitHub repo in `org/repo` format |
-| `notifications` | Array of notification configs |
+| `githubRepo`          | GitHub repo in `org/repo` format    |
+| `notifications`       | Array of notification configs       |
 
 ### Notification Providers
 
@@ -162,15 +162,37 @@ Each tenant in `tenants.json` supports:
 
 ## API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check with status |
-| `GET /dashboard` | Web dashboard |
-| `GET /dashboard/api/status` | JSON status overview |
-| `GET /dashboard/api/agents` | Active agent details |
-| `GET /dashboard/api/costs` | Cost records |
-| `GET /dashboard/api/queue` | Queued tickets |
-| `POST /webhook/linear` | Linear webhook endpoint |
+| Endpoint                    | Description              |
+| --------------------------- | ------------------------ |
+| `GET /health`               | Health check with status |
+| `GET /dashboard`            | Web dashboard            |
+| `GET /dashboard/api/status` | JSON status overview     |
+| `GET /dashboard/api/agents` | Active agent details     |
+| `GET /dashboard/api/costs`  | Cost records             |
+| `GET /dashboard/api/queue`  | Queued tickets           |
+| `POST /webhook/linear`      | Linear webhook endpoint  |
+
+## Development
+
+### Running Tests
+
+```bash
+npm test                    # Run all tests
+npm run test:watch          # Watch mode
+npm run test:coverage       # With coverage report
+```
+
+### Code Quality
+
+```bash
+npm run lint                # Run ESLint
+npm run typecheck           # TypeScript type checking
+npm run format              # Format with Prettier
+```
+
+Coverage threshold is set to **70%** for statements, branches, functions, and lines.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## Deployment
 
