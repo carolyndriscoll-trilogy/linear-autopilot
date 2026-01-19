@@ -4,6 +4,7 @@ import { getAllTenants } from '../config/tenants';
 import { createWebhookRouter, PollingWatcher } from '../watcher';
 import { spawner } from '../spawner';
 import { logger } from '../logger';
+import { createDashboardRouter } from '../dashboard';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const POLLING_INTERVAL = parseInt(process.env.LINEAR_POLLING_INTERVAL_MS || '0', 10);
@@ -49,6 +50,9 @@ export async function startServer(): Promise<void> {
   // Webhook endpoints
   app.use('/webhook', createWebhookRouter());
 
+  // Dashboard
+  app.use('/dashboard', createDashboardRouter());
+
   // Start the spawner
   spawner.start();
 
@@ -62,6 +66,7 @@ export async function startServer(): Promise<void> {
   const server = app.listen(PORT, () => {
     logger.info('Server listening', {
       port: PORT,
+      dashboard: `http://localhost:${PORT}/dashboard`,
       healthEndpoint: `http://localhost:${PORT}/health`,
       webhookEndpoint: POLLING_INTERVAL === 0 ? `http://localhost:${PORT}/webhook/linear` : undefined,
     });

@@ -15,6 +15,7 @@ import {
 import { logger } from '../logger';
 import { validate, formatValidationSummary } from '../validation';
 import { recordUsage } from '../tracking';
+import { recordCompletion } from '../dashboard';
 
 const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
@@ -238,10 +239,16 @@ class Spawner {
         // Move to In Review
         await updateTicketStatus(ticket, 'In Review');
         logger.info('Created PR and moved ticket to In Review', { ticketId: ticket.identifier, prUrl });
+
+        // Record completion for dashboard
+        recordCompletion(ticket.identifier, tenant.name, duration, prUrl);
       } else {
         // No PR created (maybe no changes), just mark as done
         await updateTicketStatus(ticket, 'Done');
         logger.info('Marked ticket as Done (no PR needed)', { ticketId: ticket.identifier });
+
+        // Record completion for dashboard
+        recordCompletion(ticket.identifier, tenant.name, duration);
       }
 
       // Notify: agent completed
