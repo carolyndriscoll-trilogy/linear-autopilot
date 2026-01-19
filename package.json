@@ -2,14 +2,19 @@
   "name": "linear-autopilot",
   "version": "1.0.0",
   "description": "Autonomous agents that work your Linear tickets while you sleep.",
-  "main": "dist/index.js",
+  "main": "dist/server/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "ts-node src/server/index.ts",
+    "watch": "LINEAR_POLLING_INTERVAL_MS=30000 ts-node src/server/index.ts",
     "dev": "ts-node src/index.ts",
     "runner": "ts-node src/runner.ts"
   },
+  "dependencies": {
+    "express": "^4.18.0"
+  },
   "devDependencies": {
+    "@types/express": "^4.17.0",
     "@types/node": "^20.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0"

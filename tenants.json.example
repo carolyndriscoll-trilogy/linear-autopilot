@@ -1,0 +1,19 @@
+{
+  "tenants": [
+    {
+      "name": "Test Todo App",
+      "linearTeamId": "80d5819b-2a78-4b48-96bc-52ef58a605f8",
+      "repoPath": "/Users/carolyndriscoll/test-todo-app",
+      "maxConcurrentAgents": 2,
+      "githubRepo": "carolyndriscoll/test-todo-app",
+      "slackWebhook": "https://hooks.slack.com/services/xxx/yyy/zzz"
+    },
+    {
+      "name": "Another Project",
+      "linearTeamId": "another-team-uuid",
+      "repoPath": "/path/to/another/repo",
+      "maxConcurrentAgents": 1,
+      "githubRepo": "org/another-repo"
+    }
+  ]
+}
