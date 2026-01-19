@@ -4,3 +4,11 @@ dist
 tenants.json
 data/
 coverage
+
+# Compiled files outside dist
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+!jest.config.ts
+!eslint.config.mjs

@@ -29,3 +29,13 @@ export function formatMemoryForPrompt(memory: SessionMemory | null): string {
 
   return lines.join('\n');
 }
+
+export interface MemoryUpdate {
+  learnings?: string[];
+  errors?: string[];
+}
+
+export function updateMemory(_repoPath: string, _update: MemoryUpdate): void {
+  // TODO: Implement memory persistence to disk/database
+  // This will store learnings and errors for future agent context
+}
