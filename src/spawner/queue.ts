@@ -1,5 +1,6 @@
 import { LinearTicket } from '../linear';
 import { TenantConfig } from '../config/tenants';
+import { logger } from '../logger';
 
 export interface QueuedTicket {
   ticket: LinearTicket;
@@ -15,7 +16,7 @@ class TicketQueue {
     // Avoid duplicates
     const exists = this.queue.some((q) => q.ticket.identifier === ticket.identifier);
     if (exists) {
-      console.log(`Ticket ${ticket.identifier} already in queue, skipping`);
+      logger.debug('Ticket already in queue, skipping', { ticketId: ticket.identifier });
       return;
     }
 
@@ -25,7 +26,7 @@ class TicketQueue {
       enqueuedAt: new Date(),
       attempts: 0,
     });
-    console.log(`Enqueued ${ticket.identifier}: ${ticket.title} (queue size: ${this.queue.length})`);
+    logger.info('Enqueued ticket', { ticketId: ticket.identifier, title: ticket.title, queueSize: this.queue.length, tenant: tenant.name });
   }
 
   dequeue(): QueuedTicket | undefined {
@@ -52,9 +53,9 @@ class TicketQueue {
     item.attempts++;
     if (item.attempts < 3) {
       this.queue.push(item);
-      console.log(`Requeued ${item.ticket.identifier} (attempt ${item.attempts})`);
+      logger.info('Requeued ticket', { ticketId: item.ticket.identifier, attempt: item.attempts });
     } else {
-      console.log(`Dropped ${item.ticket.identifier} after ${item.attempts} attempts`);
+      logger.warn('Dropped ticket after max attempts', { ticketId: item.ticket.identifier, attempts: item.attempts });
     }
   }
 

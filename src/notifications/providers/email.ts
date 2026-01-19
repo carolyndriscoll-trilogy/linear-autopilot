@@ -1,5 +1,6 @@
 import { NotificationProvider, NotificationEvent } from '../types';
 import { formatMarkdown, formatPlain } from '../formatter';
+import { logger } from '../../logger';
 
 export const emailProvider: NotificationProvider = {
   name: 'email',
@@ -20,8 +21,8 @@ export const emailProvider: NotificationProvider = {
     } else if (provider === 'sendgrid') {
       await sendWithSendGrid(apiKey, from || 'autopilot@example.com', to, subject, text, html);
     } else {
-      console.warn(`Email provider "${provider}" not implemented, logging instead:`);
-      console.log(`To: ${to}, Subject: ${subject}\n${text}`);
+      logger.warn('Email provider not implemented, logging instead', { provider, to, subject });
+      logger.debug('Email content', { text });
     }
   },
 };

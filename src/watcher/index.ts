@@ -4,6 +4,7 @@ import { getConfig } from '../config';
 import { getTenantByTeamId, getAllTenants } from '../config/tenants';
 import { fetchTicket, LinearTicket } from '../linear';
 import { ticketQueue } from '../spawner/queue';
+import { logger } from '../logger';
 
 const AGENT_READY_LABEL = 'agent-ready';
 
@@ -43,7 +44,7 @@ export function createWebhookRouter(): express.Router {
     if (webhookSecret) {
       const signature = req.headers['linear-signature'] as string;
       if (!verifyWebhookSignature(req.body, signature, webhookSecret)) {
-        console.warn('Invalid webhook signature');
+        logger.warn('Invalid webhook signature');
         res.status(401).json({ error: 'Invalid signature' });
         return;
       }
@@ -54,7 +55,7 @@ export function createWebhookRouter(): express.Router {
       await handleWebhookEvent(payload);
       res.status(200).json({ ok: true });
     } catch (error) {
-      console.error('Webhook processing error:', error);
+      logger.error('Webhook processing error', { error: String(error) });
       res.status(500).json({ error: 'Processing failed' });
     }
   });
@@ -88,7 +89,7 @@ async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> 
     return;
   }
 
-  console.log(`Agent-ready label detected on ${issueId}`);
+  logger.info('Agent-ready label detected', { ticketId: issueId });
 
   // Fetch full ticket details
   const ticket = await fetchTicket(issueId);
@@ -97,7 +98,7 @@ async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> 
   const tenant = getTenantByTeamId(ticket.team.id);
 
   if (!tenant) {
-    console.warn(`No tenant config for team ${ticket.team.id} (${ticket.team.name}), skipping ${issueId}`);
+    logger.warn('No tenant config for team, skipping', { teamId: ticket.team.id, teamName: ticket.team.name, ticketId: issueId });
     return;
   }
 
@@ -143,7 +144,7 @@ async function checkAgentReadyLabelAdded(
 
     return labels.some((label) => label.name.toLowerCase() === AGENT_READY_LABEL);
   } catch (error) {
-    console.error('Error fetching labels:', error);
+    logger.error('Error fetching labels', { error: String(error) });
     return false;
   }
 }
@@ -159,7 +160,7 @@ export class PollingWatcher {
   }
 
   start(): void {
-    console.log(`Polling watcher started (interval: ${this.intervalMs}ms)`);
+    logger.info('Polling watcher started', { intervalMs: this.intervalMs });
     this.poll(); // Initial poll
     this.pollTimer = setInterval(() => this.poll(), this.intervalMs);
   }
@@ -169,7 +170,7 @@ export class PollingWatcher {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    console.log('Polling watcher stopped');
+    logger.info('Polling watcher stopped');
   }
 
   private async poll(): Promise<void> {
@@ -179,7 +180,7 @@ export class PollingWatcher {
       try {
         await this.pollTenant(tenant.linearTeamId);
       } catch (error) {
-        console.error(`Error polling team ${tenant.linearTeamId}:`, error);
+        logger.error('Error polling team', { teamId: tenant.linearTeamId, error: String(error) });
       }
     }
   }

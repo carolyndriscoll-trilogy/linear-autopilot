@@ -1,1 +1,3 @@
-console.log('linear-autopilot starting...');
+import { logger } from './logger';
+
+logger.info('linear-autopilot starting...');

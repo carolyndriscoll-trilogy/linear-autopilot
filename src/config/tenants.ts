@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { logger } from '../logger';
 
 export type NotificationType = 'email' | 'slack' | 'discord' | 'sms' | 'whatsapp' | 'gchat';
 
@@ -31,7 +32,7 @@ function loadTenants(): TenantConfig[] {
   const tenantsPath = process.env.TENANTS_CONFIG_PATH || join(process.cwd(), 'tenants.json');
 
   if (!existsSync(tenantsPath)) {
-    console.warn(`Warning: tenants.json not found at ${tenantsPath}`);
+    logger.warn('tenants.json not found', { path: tenantsPath });
     return [];
   }
 
@@ -39,10 +40,10 @@ function loadTenants(): TenantConfig[] {
     const content = readFileSync(tenantsPath, 'utf-8');
     const data = JSON.parse(content) as TenantsFile;
     tenantsCache = data.tenants || [];
-    console.log(`Loaded ${tenantsCache.length} tenant(s) from ${tenantsPath}`);
+    logger.info('Loaded tenants', { count: tenantsCache.length, path: tenantsPath });
     return tenantsCache;
   } catch (error) {
-    console.error(`Error loading tenants.json: ${error}`);
+    logger.error('Error loading tenants.json', { error: String(error) });
     return [];
   }
 }

@@ -3,7 +3,7 @@ import { validateConfig } from '../config';
 import { getAllTenants } from '../config/tenants';
 import { createWebhookRouter, PollingWatcher } from '../watcher';
 import { spawner } from '../spawner';
-import { ticketQueue } from '../spawner/queue';
+import { logger } from '../logger';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const POLLING_INTERVAL = parseInt(process.env.LINEAR_POLLING_INTERVAL_MS || '0', 10);
@@ -17,16 +17,15 @@ export async function startServer(): Promise<void> {
 
   const tenants = getAllTenants();
   if (tenants.length === 0) {
-    console.error('No tenants configured. Create a tenants.json file.');
+    logger.error('No tenants configured. Create a tenants.json file.');
     process.exit(1);
   }
 
-  console.log(`\n${'='.repeat(60)}`);
-  console.log('Linear Autopilot Server');
-  console.log(`${'='.repeat(60)}`);
-  console.log(`Tenants: ${tenants.map((t) => t.name).join(', ')}`);
-  console.log(`Mode: ${POLLING_INTERVAL > 0 ? 'Polling' : 'Webhook'}`);
-  console.log(`${'='.repeat(60)}\n`);
+  logger.info('Linear Autopilot Server starting', {
+    tenants: tenants.map((t) => t.name),
+    mode: POLLING_INTERVAL > 0 ? 'polling' : 'webhook',
+    port: PORT,
+  });
 
   const app = express();
 
@@ -61,11 +60,11 @@ export async function startServer(): Promise<void> {
 
   // Start HTTP server
   const server = app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/health`);
-    if (POLLING_INTERVAL === 0) {
-      console.log(`Webhook endpoint: http://localhost:${PORT}/webhook/linear`);
-    }
+    logger.info('Server listening', {
+      port: PORT,
+      healthEndpoint: `http://localhost:${PORT}/health`,
+      webhookEndpoint: POLLING_INTERVAL === 0 ? `http://localhost:${PORT}/webhook/linear` : undefined,
+    });
   });
 
   // Graceful shutdown
@@ -73,7 +72,7 @@ export async function startServer(): Promise<void> {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
-    console.log(`\n${signal} received, starting graceful shutdown...`);
+    logger.info('Graceful shutdown initiated', { signal });
 
     // Stop accepting new webhooks/polls
     if (pollingWatcher) {
@@ -84,19 +83,18 @@ export async function startServer(): Promise<void> {
     spawner.stop();
 
     // Wait for active agents to finish
-    console.log('Waiting for active agents to complete...');
+    logger.info('Waiting for active agents to complete');
     await spawner.waitForActiveAgents();
 
     // Close HTTP server
     server.close(() => {
-      console.log('HTTP server closed');
-      console.log('Graceful shutdown complete');
+      logger.info('Graceful shutdown complete');
       process.exit(0);
     });
 
     // Force exit after 60 seconds
     setTimeout(() => {
-      console.error('Forced shutdown after timeout');
+      logger.error('Forced shutdown after timeout');
       process.exit(1);
     }, 60000);
   };
@@ -108,7 +106,7 @@ export async function startServer(): Promise<void> {
 // Run if called directly
 if (require.main === module) {
   startServer().catch((error) => {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server', { error: String(error) });
     process.exit(1);
   });
 }

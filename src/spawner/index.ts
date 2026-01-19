@@ -12,6 +12,7 @@ import {
   createAgentStuckEvent,
   createPrCreatedEvent,
 } from '../notifications';
+import { logger } from '../logger';
 
 const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
@@ -45,7 +46,7 @@ class Spawner {
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log('Spawner started');
+    logger.info('Spawner started');
     this.pollInterval = setInterval(() => this.processQueue(), 2000);
     this.healthCheckInterval = setInterval(() => this.checkStuckAgents(), 60000);
   }
@@ -60,12 +61,12 @@ class Spawner {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }
-    console.log('Spawner stopped');
+    logger.info('Spawner stopped');
   }
 
   async waitForActiveAgents(): Promise<void> {
     while (this.activeAgents.size > 0) {
-      console.log(`Waiting for ${this.activeAgents.size} active agent(s) to finish...`);
+      logger.info('Waiting for active agents to finish', { count: this.activeAgents.size });
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
@@ -77,7 +78,7 @@ class Spawner {
       const runningFor = now - agent.startedAt.getTime();
 
       if (runningFor > STUCK_THRESHOLD_MS && !agent.notifiedStuck) {
-        console.warn(`Agent for ${ticketId} appears stuck (running for ${Math.round(runningFor / 60000)}m)`);
+        logger.warn('Agent appears stuck', { ticketId, runningForMinutes: Math.round(runningFor / 60000), tenant: agent.tenant.name });
 
         agent.notifiedStuck = true;
 
@@ -114,10 +115,7 @@ class Spawner {
     const branchName = ticket.identifier.toLowerCase();
     const startTime = Date.now();
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Spawning agent for ${ticket.identifier}: ${ticket.title}`);
-    console.log(`Tenant: ${tenant.name} | Branch: ${branchName}`);
-    console.log(`${'='.repeat(60)}\n`);
+    logger.info('Spawning agent', { ticketId: ticket.identifier, title: ticket.title, tenant: tenant.name, branchName });
 
     this.activeAgents.set(ticket.identifier, {
       ticket,
@@ -179,7 +177,7 @@ class Spawner {
       });
 
       claude.on('error', (err) => {
-        console.error('Failed to spawn Claude Code:', err.message);
+        logger.error('Failed to spawn Claude Code', { error: err.message });
         resolve(false);
       });
     });
@@ -191,7 +189,7 @@ class Spawner {
     branchName: string,
     duration: number
   ): Promise<void> {
-    console.log(`\n✓ Agent completed ${ticket.identifier} successfully`);
+    logger.info('Agent completed successfully', { ticketId: ticket.identifier, tenant: tenant.name });
 
     try {
       // Push branch and create PR
@@ -206,11 +204,11 @@ class Spawner {
 
         // Move to In Review
         await updateTicketStatus(ticket, 'In Review');
-        console.log(`✓ Created PR and moved ${ticket.identifier} to In Review`);
+        logger.info('Created PR and moved ticket to In Review', { ticketId: ticket.identifier, prUrl });
       } else {
         // No PR created (maybe no changes), just mark as done
         await updateTicketStatus(ticket, 'Done');
-        console.log(`✓ Marked ${ticket.identifier} as Done (no PR needed)`);
+        logger.info('Marked ticket as Done (no PR needed)', { ticketId: ticket.identifier });
       }
 
       // Notify: agent completed
@@ -221,7 +219,7 @@ class Spawner {
         learnings: [`Completed ${ticket.identifier}: ${ticket.title}`],
       });
     } catch (error) {
-      console.error(`Error in post-success handling: ${error}`);
+      logger.error('Error in post-success handling', { ticketId: ticket.identifier, error: String(error) });
       await updateTicketStatus(ticket, 'Done');
     }
   }
@@ -233,7 +231,7 @@ class Spawner {
     branchName: string,
     errorMessage: string
   ): Promise<void> {
-    console.log(`\n✗ Agent failed for ${ticket.identifier}: ${errorMessage}`);
+    logger.error('Agent failed', { ticketId: ticket.identifier, error: errorMessage, tenant: tenant.name });
 
     try {
       // Clean up any partial branch
@@ -273,7 +271,7 @@ class Spawner {
       // Requeue for retry
       ticketQueue.requeue(item);
     } catch (error) {
-      console.error(`Error in failure handling: ${error}`);
+      logger.error('Error in failure handling', { ticketId: ticket.identifier, error: String(error) });
     }
   }
 
@@ -290,7 +288,7 @@ class Spawner {
       }).trim();
 
       if (!diffResult) {
-        console.log('No commits on branch, skipping PR creation');
+        logger.debug('No commits on branch, skipping PR creation', { branchName });
         return null;
       }
 
@@ -317,10 +315,10 @@ Linear: ${ticket.identifier}
         }
       ).trim();
 
-      console.log(`Created PR: ${prResult}`);
+      logger.info('Created PR', { prUrl: prResult, branchName, ticketId: ticket.identifier });
       return prResult;
     } catch (error) {
-      console.error(`Failed to create PR: ${error}`);
+      logger.error('Failed to create PR', { branchName, ticketId: ticket.identifier, error: String(error) });
       return null;
     }
   }

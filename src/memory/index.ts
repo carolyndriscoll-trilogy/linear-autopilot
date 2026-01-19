@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import { logger } from '../logger';
 
 export interface RepoMemory {
   patterns: string[];
@@ -48,7 +49,7 @@ export function getMemory(repoPath: string): RepoMemory {
       lastUpdated: new Date(data.lastUpdated),
     };
   } catch (error) {
-    console.error(`Error reading memory for ${repoPath}: ${error}`);
+    logger.error('Error reading memory', { repoPath, error: String(error) });
     return createDefaultMemory();
   }
 }

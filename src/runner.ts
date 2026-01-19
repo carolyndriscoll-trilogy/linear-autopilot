@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { validateConfig, getConfig } from './config';
 import { fetchTicket, updateTicketStatus } from './linear';
 import { buildTicketPrompt } from './prompts';
+import { logger } from './logger';
 
 function runClaudeCode(prompt: string, repoPath: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -15,7 +16,7 @@ function runClaudeCode(prompt: string, repoPath: string): Promise<boolean> {
     claude.stderr?.on('data', (data: Buffer) => process.stderr.write(data));
     claude.on('close', (code) => resolve(code === 0));
     claude.on('error', (err) => {
-      console.error('Failed to spawn Claude Code:', err.message);
+      logger.error('Failed to spawn Claude Code', { error: err.message });
       resolve(false);
     });
   });
@@ -24,7 +25,7 @@ function runClaudeCode(prompt: string, repoPath: string): Promise<boolean> {
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
-    console.error('Usage: npm run runner <ticket-id> [repo-path]');
+    logger.error('Usage: npm run runner <ticket-id> [repo-path]');
     process.exit(1);
   }
 
@@ -34,32 +35,28 @@ async function main() {
   const repoPath = args[1] || config.defaultRepoPath;
 
   if (!repoPath) {
-    console.error('Error: No repo path provided and DEFAULT_REPO_PATH not set');
+    logger.error('No repo path provided and DEFAULT_REPO_PATH not set');
     process.exit(1);
   }
 
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`Linear Autopilot | ${ticketId} | ${repoPath}`);
-  console.log(`${'='.repeat(60)}\n`);
+  logger.info('Linear Autopilot Runner starting', { ticketId, repoPath });
 
   try {
     const ticket = await fetchTicket(ticketId);
-    console.log(`Ticket: ${ticket.title}\n`);
+    logger.info('Fetched ticket', { ticketId: ticket.identifier, title: ticket.title });
 
     const success = await runClaudeCode(buildTicketPrompt(ticket, repoPath), repoPath);
 
-    console.log(`\n${'='.repeat(60)}`);
     if (success) {
-      console.log(`✓ Claude Code completed`);
+      logger.info('Claude Code completed successfully', { ticketId });
       await updateTicketStatus(ticket, 'Done');
-      console.log(`✓ Marked ${ticket.identifier} as Done`);
+      logger.info('Marked ticket as Done', { ticketId: ticket.identifier });
     } else {
-      console.log(`✗ Claude Code failed`);
+      logger.error('Claude Code failed', { ticketId });
     }
-    console.log(`${'='.repeat(60)}\n`);
     process.exit(success ? 0 : 1);
   } catch (error) {
-    console.error(`✗ ERROR: ${error instanceof Error ? error.message : error}`);
+    logger.error('Runner failed', { ticketId, error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
   }
 }

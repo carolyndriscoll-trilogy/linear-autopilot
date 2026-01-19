@@ -1,5 +1,6 @@
 import { NotificationType, NotificationConfig } from '../config/tenants';
 import { NotificationEvent, NotificationProvider } from './types';
+import { logger } from '../logger';
 import { slackProvider } from './providers/slack';
 import { discordProvider } from './providers/discord';
 import { emailProvider } from './providers/email';
@@ -31,15 +32,15 @@ export async function send(
       const provider = providers[notification.type];
 
       if (!provider) {
-        console.warn(`Unknown notification provider: ${notification.type}`);
+        logger.warn('Unknown notification provider', { type: notification.type });
         return;
       }
 
       try {
         await provider.send(event, notification.config);
-        console.log(`Notification sent via ${notification.type}`);
+        logger.debug('Notification sent', { type: notification.type, ticketId: event.ticket.identifier });
       } catch (error) {
-        console.error(`Failed to send ${notification.type} notification:`, error);
+        logger.error('Failed to send notification', { type: notification.type, error: String(error) });
         throw error;
       }
     })
@@ -48,7 +49,7 @@ export async function send(
   // Log any failures but don't fail the overall operation
   const failures = results.filter((r) => r.status === 'rejected');
   if (failures.length > 0) {
-    console.warn(`${failures.length}/${notifications.length} notifications failed`);
+    logger.warn('Some notifications failed', { failed: failures.length, total: notifications.length });
   }
 }
 
