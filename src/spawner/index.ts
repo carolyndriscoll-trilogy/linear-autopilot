@@ -14,6 +14,7 @@ import {
 } from '../notifications';
 import { logger } from '../logger';
 import { validate, formatValidationSummary } from '../validation';
+import { recordUsage } from '../tracking';
 
 const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
@@ -141,10 +142,13 @@ class Spawner {
         includeMemory: true,
       });
 
-      const success = await this.runClaudeCode(prompt, tenant.repoPath);
+      const result = await this.runClaudeCode(prompt, tenant.repoPath);
       const duration = Date.now() - startTime;
 
-      if (success) {
+      // Record token usage for cost tracking
+      recordUsage(tenant.repoPath, ticket.identifier, result.output, tenant.name);
+
+      if (result.success) {
         await this.handleSuccess(ticket, tenant, item, branchName, duration);
       } else {
         await this.handleFailure(ticket, tenant, item, branchName, 'Claude Code exited with errors');
@@ -157,7 +161,7 @@ class Spawner {
     }
   }
 
-  private runClaudeCode(prompt: string, repoPath: string): Promise<boolean> {
+  private runClaudeCode(prompt: string, repoPath: string): Promise<{ success: boolean; output: string }> {
     return new Promise((resolve) => {
       const claude = spawn('claude', ['-p', '--dangerously-skip-permissions', prompt], {
         cwd: repoPath,
@@ -165,21 +169,27 @@ class Spawner {
         env: { ...process.env },
       });
 
+      let output = '';
+
       claude.stdout?.on('data', (data: Buffer) => {
+        const text = data.toString();
+        output += text;
         process.stdout.write(data);
       });
 
       claude.stderr?.on('data', (data: Buffer) => {
+        const text = data.toString();
+        output += text;
         process.stderr.write(data);
       });
 
       claude.on('close', (code) => {
-        resolve(code === 0);
+        resolve({ success: code === 0, output });
       });
 
       claude.on('error', (err) => {
         logger.error('Failed to spawn Claude Code', { error: err.message });
-        resolve(false);
+        resolve({ success: false, output });
       });
     });
   }
