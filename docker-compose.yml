@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  linear-autopilot:
+    build: .
+    container_name: linear-autopilot
+    restart: always
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Mount tenants configuration
+      - ./tenants.json:/app/tenants.json:ro
+      # Mount data directory for memory and costs persistence
+      - ./data:/app/data
+      # Mount repos for agent access (adjust paths as needed)
+      # - /path/to/repo1:/repos/repo1
+      # - /path/to/repo2:/repos/repo2
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
