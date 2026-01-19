@@ -5,6 +5,7 @@ export type NotificationEventType =
   | 'agent-started'
   | 'agent-completed'
   | 'agent-failed'
+  | 'agent-stuck'
   | 'pr-created';
 
 export interface BaseNotificationEvent {
@@ -33,6 +34,13 @@ export interface AgentFailedEvent extends BaseNotificationEvent {
   maxAttempts: number;
 }
 
+export interface AgentStuckEvent extends BaseNotificationEvent {
+  type: 'agent-stuck';
+  branchName: string;
+  runningFor: number; // milliseconds
+  lastActivity?: string;
+}
+
 export interface PrCreatedEvent extends BaseNotificationEvent {
   type: 'pr-created';
   prUrl: string;
@@ -43,6 +51,7 @@ export type NotificationEvent =
   | AgentStartedEvent
   | AgentCompletedEvent
   | AgentFailedEvent
+  | AgentStuckEvent
   | PrCreatedEvent;
 
 export interface NotificationProvider {

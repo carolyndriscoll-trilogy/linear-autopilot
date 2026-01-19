@@ -19,6 +19,8 @@ function getEmoji(event: NotificationEvent): string {
       return '✅';
     case 'agent-failed':
       return '❌';
+    case 'agent-stuck':
+      return '⚠️';
     case 'pr-created':
       return '🔗';
   }
@@ -32,6 +34,8 @@ function getTitle(event: NotificationEvent): string {
       return 'Agent Completed';
     case 'agent-failed':
       return 'Agent Failed';
+    case 'agent-stuck':
+      return 'Agent Stuck';
     case 'pr-created':
       return 'PR Created';
   }
@@ -45,6 +49,8 @@ function getColor(event: NotificationEvent): string {
       return '#22c55e'; // green
     case 'agent-failed':
       return '#ef4444'; // red
+    case 'agent-stuck':
+      return '#f59e0b'; // amber
     case 'pr-created':
       return '#8b5cf6'; // purple
   }
@@ -62,6 +68,8 @@ export function formatPlain(event: NotificationEvent): string {
       return `${base}\nDuration: ${formatDuration(event.duration)}`;
     case 'agent-failed':
       return `${base}\nError: ${event.error}\nAttempt: ${event.attempt}/${event.maxAttempts}`;
+    case 'agent-stuck':
+      return `${base}\nRunning for: ${formatDuration(event.runningFor)}${event.lastActivity ? `\nLast activity: ${event.lastActivity}` : ''}`;
     case 'pr-created':
       return `${base}\nPR: ${event.prUrl}`;
   }
@@ -79,6 +87,8 @@ export function formatMarkdown(event: NotificationEvent): string {
       return `${base}\n**Duration:** ${formatDuration(event.duration)}`;
     case 'agent-failed':
       return `${base}\n**Error:** ${event.error}\n**Attempt:** ${event.attempt}/${event.maxAttempts}`;
+    case 'agent-stuck':
+      return `${base}\n**Running for:** ${formatDuration(event.runningFor)}${event.lastActivity ? `\n**Last activity:** ${event.lastActivity}` : ''}`;
     case 'pr-created':
       return `${base}\n**PR:** [View PR](${event.prUrl})`;
   }
@@ -103,6 +113,12 @@ export function formatSlackBlocks(event: NotificationEvent): object {
       break;
     case 'agent-failed':
       fields.push({ type: 'mrkdwn', text: `*Attempt:*\n${event.attempt}/${event.maxAttempts}` });
+      break;
+    case 'agent-stuck':
+      fields.push({ type: 'mrkdwn', text: `*Running for:*\n${formatDuration(event.runningFor)}` });
+      if (event.lastActivity) {
+        fields.push({ type: 'mrkdwn', text: `*Last activity:*\n${event.lastActivity}` });
+      }
       break;
     case 'pr-created':
       fields.push({ type: 'mrkdwn', text: `*PR:*\n<${event.prUrl}|View PR>` });
@@ -161,6 +177,12 @@ export function formatDiscordEmbed(event: NotificationEvent): object {
     case 'agent-failed':
       fields.push({ name: 'Attempt', value: `${event.attempt}/${event.maxAttempts}`, inline: true });
       fields.push({ name: 'Error', value: `\`\`\`${event.error.slice(0, 500)}\`\`\``, inline: false });
+      break;
+    case 'agent-stuck':
+      fields.push({ name: 'Running for', value: formatDuration(event.runningFor), inline: true });
+      if (event.lastActivity) {
+        fields.push({ name: 'Last activity', value: event.lastActivity, inline: true });
+      }
       break;
     case 'pr-created':
       fields.push({ name: 'PR', value: `[View PR](${event.prUrl})`, inline: true });

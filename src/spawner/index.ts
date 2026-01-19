@@ -4,17 +4,30 @@ import { TenantConfig } from '../config/tenants';
 import { LinearTicket, updateTicketStatus, addComment } from '../linear';
 import { buildAutopilotPrompt } from '../prompts';
 import { updateMemory } from '../memory';
+import {
+  notify,
+  createAgentStartedEvent,
+  createAgentCompletedEvent,
+  createAgentFailedEvent,
+  createAgentStuckEvent,
+  createPrCreatedEvent,
+} from '../notifications';
+
+const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
 interface ActiveAgent {
   ticket: LinearTicket;
   tenant: TenantConfig;
   startedAt: Date;
+  branchName: string;
+  notifiedStuck: boolean;
 }
 
 class Spawner {
   private activeAgents: Map<string, ActiveAgent> = new Map();
   private isRunning = false;
   private pollInterval: NodeJS.Timeout | null = null;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
 
   getActiveCount(tenantId?: string): number {
     if (!tenantId) {
@@ -34,6 +47,7 @@ class Spawner {
     this.isRunning = true;
     console.log('Spawner started');
     this.pollInterval = setInterval(() => this.processQueue(), 2000);
+    this.healthCheckInterval = setInterval(() => this.checkStuckAgents(), 60000);
   }
 
   stop(): void {
@@ -41,6 +55,10 @@ class Spawner {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
+    }
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
     }
     console.log('Spawner stopped');
   }
@@ -52,6 +70,29 @@ class Spawner {
     }
   }
 
+  private async checkStuckAgents(): Promise<void> {
+    const now = Date.now();
+
+    for (const [ticketId, agent] of this.activeAgents) {
+      const runningFor = now - agent.startedAt.getTime();
+
+      if (runningFor > STUCK_THRESHOLD_MS && !agent.notifiedStuck) {
+        console.warn(`Agent for ${ticketId} appears stuck (running for ${Math.round(runningFor / 60000)}m)`);
+
+        agent.notifiedStuck = true;
+
+        const event = createAgentStuckEvent(
+          agent.ticket,
+          agent.tenant,
+          agent.branchName,
+          runningFor,
+          'No progress detected'
+        );
+        await notify(event);
+      }
+    }
+  }
+
   private async processQueue(): Promise<void> {
     if (ticketQueue.isEmpty()) return;
 
@@ -59,7 +100,7 @@ class Spawner {
     if (!item) return;
 
     if (!this.canSpawnForTenant(item.tenant)) {
-      return; // Wait for an agent slot to free up
+      return;
     }
 
     const dequeued = ticketQueue.dequeue();
@@ -71,6 +112,7 @@ class Spawner {
   private async spawnAgent(item: QueuedTicket): Promise<void> {
     const { ticket, tenant } = item;
     const branchName = ticket.identifier.toLowerCase();
+    const startTime = Date.now();
 
     console.log(`\n${'='.repeat(60)}`);
     console.log(`Spawning agent for ${ticket.identifier}: ${ticket.title}`);
@@ -81,11 +123,16 @@ class Spawner {
       ticket,
       tenant,
       startedAt: new Date(),
+      branchName,
+      notifiedStuck: false,
     });
 
     try {
       // Update ticket to In Progress
       await updateTicketStatus(ticket, 'In Progress');
+
+      // Notify: agent started
+      await notify(createAgentStartedEvent(ticket, tenant, branchName));
 
       // Run Claude Code
       const prompt = buildAutopilotPrompt({
@@ -96,15 +143,16 @@ class Spawner {
       });
 
       const success = await this.runClaudeCode(prompt, tenant.repoPath);
+      const duration = Date.now() - startTime;
 
       if (success) {
-        await this.handleSuccess(ticket, tenant, branchName);
+        await this.handleSuccess(ticket, tenant, branchName, duration);
       } else {
-        await this.handleFailure(ticket, tenant, item, 'Claude Code exited with errors');
+        await this.handleFailure(ticket, tenant, item, branchName, 'Claude Code exited with errors');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await this.handleFailure(ticket, tenant, item, message);
+      await this.handleFailure(ticket, tenant, item, branchName, message);
     } finally {
       this.activeAgents.delete(ticket.identifier);
     }
@@ -118,12 +166,8 @@ class Spawner {
         env: { ...process.env },
       });
 
-      let output = '';
-
       claude.stdout?.on('data', (data: Buffer) => {
-        const text = data.toString();
-        output += text;
-        process.stdout.write(text);
+        process.stdout.write(data);
       });
 
       claude.stderr?.on('data', (data: Buffer) => {
@@ -144,7 +188,8 @@ class Spawner {
   private async handleSuccess(
     ticket: LinearTicket,
     tenant: TenantConfig,
-    branchName: string
+    branchName: string,
+    duration: number
   ): Promise<void> {
     console.log(`\n✓ Agent completed ${ticket.identifier} successfully`);
 
@@ -153,6 +198,9 @@ class Spawner {
       const prUrl = await this.createPullRequest(tenant, branchName, ticket);
 
       if (prUrl) {
+        // Notify: PR created
+        await notify(createPrCreatedEvent(ticket, tenant, branchName, prUrl));
+
         // Add comment to Linear ticket with PR link
         await addComment(ticket, `✅ Implementation complete!\n\nPR: ${prUrl}`);
 
@@ -164,6 +212,9 @@ class Spawner {
         await updateTicketStatus(ticket, 'Done');
         console.log(`✓ Marked ${ticket.identifier} as Done (no PR needed)`);
       }
+
+      // Notify: agent completed
+      await notify(createAgentCompletedEvent(ticket, tenant, branchName, duration));
 
       // Update memory with success
       updateMemory(tenant.repoPath, {
@@ -179,6 +230,7 @@ class Spawner {
     ticket: LinearTicket,
     tenant: TenantConfig,
     item: QueuedTicket,
+    branchName: string,
     errorMessage: string
   ): Promise<void> {
     console.log(`\n✗ Agent failed for ${ticket.identifier}: ${errorMessage}`);
@@ -186,13 +238,23 @@ class Spawner {
     try {
       // Clean up any partial branch
       try {
-        execSync('git checkout main && git branch -D ' + ticket.identifier.toLowerCase(), {
+        execSync('git checkout main && git branch -D ' + branchName, {
           cwd: tenant.repoPath,
           stdio: 'pipe',
         });
       } catch {
         // Ignore cleanup errors
       }
+
+      // Notify: agent failed
+      await notify(createAgentFailedEvent(
+        ticket,
+        tenant,
+        branchName,
+        errorMessage,
+        item.attempts + 1,
+        3
+      ));
 
       // Add comment with error
       await addComment(
@@ -269,6 +331,10 @@ Linear: ${ticket.identifier}
       queued: ticketQueue.size(),
       agents: Array.from(this.activeAgents.keys()),
     };
+  }
+
+  getActiveAgents(): ActiveAgent[] {
+    return Array.from(this.activeAgents.values());
   }
 }
 

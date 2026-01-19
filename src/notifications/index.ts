@@ -109,6 +109,24 @@ export function createAgentFailedEvent(
   };
 }
 
+export function createAgentStuckEvent(
+  ticket: NotificationEvent['ticket'],
+  tenant: NotificationEvent['tenant'],
+  branchName: string,
+  runningFor: number,
+  lastActivity?: string
+): NotificationEvent {
+  return {
+    type: 'agent-stuck',
+    ticket,
+    tenant,
+    branchName,
+    runningFor,
+    lastActivity,
+    timestamp: new Date(),
+  };
+}
+
 export function createPrCreatedEvent(
   ticket: NotificationEvent['ticket'],
   tenant: NotificationEvent['tenant'],
