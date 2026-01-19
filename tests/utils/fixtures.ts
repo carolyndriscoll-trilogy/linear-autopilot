@@ -1,127 +1,157 @@
 // tests/utils/fixtures.ts
+import { LinearTicket } from '../../src/linear/types';
+import { TenantConfig, NotificationConfig } from '../../src/config/tenants';
+import {
+  PrCreatedEvent,
+  AgentStartedEvent,
+  AgentCompletedEvent,
+  AgentFailedEvent,
+  AgentStuckEvent,
+} from '../../src/notifications/types';
 
 /**
  * Test fixtures and factories for Linear Autopilot tests
  */
 
-export const createMockIssue = (overrides: Partial<MockIssue> = {}): MockIssue => ({
-  id: 'issue-123',
-  identifier: 'ABC-123',
-  title: 'Test Issue',
-  description: 'This is a test issue description',
-  state: { name: 'Backlog' },
-  labels: { nodes: [] },
-  team: { id: 'team-123', name: 'Test Team' },
-  ...overrides,
-});
-
-export const createMockTenant = (overrides: Partial<MockTenant> = {}): MockTenant => ({
-  name: 'test-tenant',
-  linearTeamId: 'team-123',
-  repoPath: '/tmp/test-repo',
-  maxConcurrentAgents: 2,
-  githubRepo: 'org/repo',
-  notifications: [],
-  ...overrides,
-});
-
-export const createMockWebhookPayload = (
-  action: string,
-  overrides: Partial<MockWebhookPayload> = {}
-): MockWebhookPayload => ({
-  action,
-  type: 'Issue',
-  createdAt: new Date().toISOString(),
-  data: createMockIssue(),
-  ...overrides,
-});
-
-export const createMockAgentResult = (
-  overrides: Partial<MockAgentResult> = {}
-): MockAgentResult => ({
-  success: true,
-  ticketId: 'ABC-123',
-  branchName: 'feature/ABC-123-test-issue',
-  prUrl: 'https://github.com/org/repo/pull/1',
-  tokensUsed: 5000,
-  costEstimate: 0.15,
-  duration: 120000,
-  ...overrides,
-});
-
-// Types for fixtures
-interface MockIssue {
-  id: string;
-  identifier: string;
-  title: string;
-  description: string;
-  state: { name: string };
-  labels: { nodes: Array<{ name: string }> };
-  team: { id: string; name: string };
+export function createMockTicket(overrides: Partial<LinearTicket> = {}): LinearTicket {
+  return {
+    id: 'issue-123',
+    identifier: 'ABC-123',
+    title: 'Test Issue',
+    description: 'This is a test issue description',
+    state: { id: 'state-1', name: 'Backlog' },
+    team: { id: 'team-123', name: 'Test Team' },
+    ...overrides,
+  };
 }
 
-interface MockTenant {
-  name: string;
-  linearTeamId: string;
-  repoPath: string;
-  maxConcurrentAgents: number;
-  githubRepo: string;
-  notifications: Array<{ type: string; config: Record<string, string> }>;
+export function createMockTenant(overrides: Partial<TenantConfig> = {}): TenantConfig {
+  return {
+    name: 'test-tenant',
+    linearTeamId: 'team-123',
+    repoPath: '/tmp/test-repo',
+    maxConcurrentAgents: 2,
+    githubRepo: 'org/repo',
+    notifications: [],
+    ...overrides,
+  };
 }
 
-interface MockWebhookPayload {
-  action: string;
-  type: string;
-  createdAt: string;
-  data: MockIssue;
+export function createMockNotificationConfig(
+  type: 'slack' | 'discord' | 'email' | 'sms' | 'whatsapp' | 'gchat' = 'slack',
+  config: Record<string, string> = {}
+): NotificationConfig {
+  const defaults: Record<string, Record<string, string>> = {
+    slack: { webhookUrl: 'https://hooks.slack.com/services/xxx/yyy/zzz' },
+    discord: { webhookUrl: 'https://discord.com/api/webhooks/xxx/yyy' },
+    email: { to: 'test@example.com', apiKey: 'test-key', provider: 'resend' },
+    sms: { to: '+1234567890', accountSid: 'sid', authToken: 'token', from: '+0987654321' },
+    whatsapp: { to: '+1234567890', accountSid: 'sid', authToken: 'token', from: '+0987654321' },
+    gchat: { webhookUrl: 'https://chat.googleapis.com/v1/spaces/xxx/messages' },
+  };
+
+  return {
+    type,
+    config: { ...defaults[type], ...config },
+  };
 }
 
-interface MockAgentResult {
-  success: boolean;
-  ticketId: string;
-  branchName: string;
-  prUrl?: string;
-  error?: string;
-  tokensUsed: number;
-  costEstimate: number;
-  duration: number;
+export function createAgentStartedEvent(
+  ticket: LinearTicket = createMockTicket(),
+  tenant: TenantConfig = createMockTenant(),
+  branchName = 'feature/ABC-123-test-issue'
+): AgentStartedEvent {
+  return {
+    type: 'agent-started',
+    ticket,
+    tenant,
+    branchName,
+    timestamp: new Date(),
+  };
+}
+
+export function createAgentCompletedEvent(
+  ticket: LinearTicket = createMockTicket(),
+  tenant: TenantConfig = createMockTenant(),
+  branchName = 'feature/ABC-123-test-issue',
+  duration = 120000
+): AgentCompletedEvent {
+  return {
+    type: 'agent-completed',
+    ticket,
+    tenant,
+    branchName,
+    duration,
+    timestamp: new Date(),
+  };
+}
+
+export function createAgentFailedEvent(
+  ticket: LinearTicket = createMockTicket(),
+  tenant: TenantConfig = createMockTenant(),
+  branchName = 'feature/ABC-123-test-issue',
+  error = 'Test error message',
+  attempt = 1,
+  maxAttempts = 3
+): AgentFailedEvent {
+  return {
+    type: 'agent-failed',
+    ticket,
+    tenant,
+    branchName,
+    error,
+    attempt,
+    maxAttempts,
+    timestamp: new Date(),
+  };
+}
+
+export function createAgentStuckEvent(
+  ticket: LinearTicket = createMockTicket(),
+  tenant: TenantConfig = createMockTenant(),
+  branchName = 'feature/ABC-123-test-issue',
+  runningFor = 3600000,
+  lastActivity?: string
+): AgentStuckEvent {
+  return {
+    type: 'agent-stuck',
+    ticket,
+    tenant,
+    branchName,
+    runningFor,
+    lastActivity,
+    timestamp: new Date(),
+  };
+}
+
+export function createPrCreatedEvent(
+  ticket: LinearTicket = createMockTicket(),
+  tenant: TenantConfig = createMockTenant(),
+  branchName = 'feature/ABC-123-test-issue',
+  prUrl = 'https://github.com/org/repo/pull/1'
+): PrCreatedEvent {
+  return {
+    type: 'pr-created',
+    ticket,
+    tenant,
+    branchName,
+    prUrl,
+    timestamp: new Date(),
+  };
 }
 
 /**
  * Wait for a condition to be true
  */
-export const waitFor = async (
+export async function waitFor(
   condition: () => boolean | Promise<boolean>,
   timeout = 5000,
   interval = 100
-): Promise<void> => {
+): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     if (await condition()) return;
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('waitFor timeout');
-};
-
-/**
- * Create a mock Express request
- */
-export const createMockRequest = (overrides: Record<string, any> = {}) => ({
-  body: {},
-  headers: {},
-  params: {},
-  query: {},
-  ...overrides,
-});
-
-/**
- * Create a mock Express response
- */
-export const createMockResponse = () => {
-  const res: Record<string, any> = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  res.send = jest.fn().mockReturnValue(res);
-  res.end = jest.fn().mockReturnValue(res);
-  return res;
-};
+}
