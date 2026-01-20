@@ -4,6 +4,8 @@ import { logger } from '../logger';
 
 export type NotificationType = 'email' | 'slack' | 'discord' | 'sms' | 'whatsapp' | 'gchat';
 
+export type RunnerType = 'claude-code' | 'swarm-sdk' | 'claude-on-rails';
+
 export interface NotificationConfig {
   type: NotificationType;
   config: Record<string, string>;
@@ -16,6 +18,12 @@ export interface TenantConfig {
   maxConcurrentAgents: number;
   githubRepo: string;
   notifications?: NotificationConfig[];
+  // Runner configuration
+  runnerType?: RunnerType;
+  // SwarmSDK complexity threshold (0-10, default 6)
+  swarmComplexityThreshold?: number;
+  // Auto-detect Rails projects (default true)
+  autoDetectRails?: boolean;
 }
 
 interface TenantsFile {

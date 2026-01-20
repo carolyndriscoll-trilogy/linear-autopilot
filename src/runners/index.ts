@@ -8,3 +8,17 @@ export {
   SwarmConfig,
   SwarmResult,
 } from './swarm-runner';
+
+export {
+  runRailsSwarm,
+  isRailsProject,
+  hasClaudeOnRailsSetup,
+  initializeClaudeOnRails,
+  analyzeTicketForRailsAgents,
+  isClaudeSwarmAvailable,
+  getDefaultRailsConfig,
+  RailsRunnerConfig,
+  RailsRunnerResult,
+} from './rails-runner';
+
+export { selectRunner, RunnerType, RunnerSelection } from './runner-selector';

@@ -130,19 +130,26 @@ Open http://localhost:3000/dashboard to view the dashboard.
 | `MCP_AGENT_MAIL_ENABLED`     | Enable multi-agent coordination      | `false`                 |
 | `MCP_AGENT_MAIL_URL`         | MCP Agent Mail server URL            | `http://localhost:8000` |
 | `MCP_AGENT_MAIL_TOKEN`       | Bearer token for authentication      | -                       |
+| `SWARM_PATH`                 | Path to SwarmSDK executable          | `swarm`                 |
+| `RAILS_RUNNER_ENABLED`       | Enable Rails runner                  | `true`                  |
+| `RAILS_RUNNER_AUTO_DETECT`   | Auto-detect Rails projects           | `true`                  |
+| `CLAUDE_SWARM_PATH`          | Path to claude-swarm executable      | `claude-swarm`          |
 
 ### Tenant Configuration
 
 Each tenant in `tenants.json` supports:
 
-| Field                 | Description                         |
-| --------------------- | ----------------------------------- |
-| `name`                | Display name for the tenant         |
-| `linearTeamId`        | Linear team ID                      |
-| `repoPath`            | Absolute path to the repository     |
-| `maxConcurrentAgents` | Max parallel agents for this tenant |
-| `githubRepo`          | GitHub repo in `org/repo` format    |
-| `notifications`       | Array of notification configs       |
+| Field                      | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| `name`                     | Display name for the tenant                           |
+| `linearTeamId`             | Linear team ID                                        |
+| `repoPath`                 | Absolute path to the repository                       |
+| `maxConcurrentAgents`      | Max parallel agents for this tenant                   |
+| `githubRepo`               | GitHub repo in `org/repo` format                      |
+| `notifications`            | Array of notification configs                         |
+| `runnerType`               | Runner: `claude-code`, `swarm-sdk`, `claude-on-rails` |
+| `swarmComplexityThreshold` | Complexity threshold for SwarmSDK (0-10)              |
+| `autoDetectRails`          | Auto-detect Rails projects (default: true)            |
 
 ### Notification Providers
 
@@ -223,6 +230,7 @@ src/
 ├── memory/          # Cross-session learning storage
 ├── notifications/   # Multi-provider notification system
 ├── prompts/         # Agent prompt templates
+├── runners/         # Multi-agent runners (SwarmSDK, claude-on-rails)
 ├── server/          # Express server and webhooks
 ├── spawner/         # Agent pool and queue management
 ├── tracking/        # Cost and token tracking
@@ -267,6 +275,95 @@ MCP_AGENT_MAIL_URL=http://localhost:8000
 - Prevents merge conflicts when multiple agents work on the same repo
 - Agents share context about changes via messaging
 - Full audit trail of agent activity (Git-backed)
+
+## Intelligent Runner Selection
+
+Linear Autopilot can route tickets to different AI runners based on project type and ticket complexity:
+
+| Runner            | Best For        | Description                               |
+| ----------------- | --------------- | ----------------------------------------- |
+| `claude-code`     | Simple tickets  | Single Claude Code agent (default)        |
+| `swarm-sdk`       | Complex tickets | Multi-agent team (planner/coder/reviewer) |
+| `claude-on-rails` | Rails projects  | Rails-specialized 7-agent swarm           |
+
+### How It Works
+
+```
+Ticket arrives
+    │
+    ├─► Explicit runnerType configured? → Use that runner
+    │
+    ├─► Rails project detected? → claude-on-rails
+    │
+    ├─► Complexity > threshold? → swarm-sdk
+    │
+    └─► Default → claude-code
+```
+
+### Per-Tenant Configuration
+
+```json
+{
+  "tenants": [
+    {
+      "name": "rails-app",
+      "linearTeamId": "xxx",
+      "repoPath": "/path/to/rails-app",
+      "runnerType": "claude-on-rails",
+      "autoDetectRails": true
+    },
+    {
+      "name": "complex-backend",
+      "linearTeamId": "yyy",
+      "repoPath": "/path/to/backend",
+      "runnerType": "swarm-sdk",
+      "swarmComplexityThreshold": 5
+    }
+  ]
+}
+```
+
+### claude-on-rails Integration
+
+For Rails projects, [claude-on-rails](https://github.com/obie/claude-on-rails) provides a specialized agent swarm:
+
+- **Architect** — System design and coordination
+- **Models** — ActiveRecord, migrations, associations
+- **Controllers** — REST endpoints, routing
+- **Views** — Templates, partials, forms
+- **Services** — Business logic, service objects
+- **Tests** — RSpec/Minitest coverage
+- **DevOps** — Deployment, infrastructure
+
+```bash
+# Install claude-on-rails
+gem install claude-swarm
+
+# Initialize in your Rails project
+cd /path/to/rails-app
+rails generate claude_on_rails:swarm
+
+# Enable in Linear Autopilot
+RAILS_RUNNER_ENABLED=true
+CLAUDE_SWARM_PATH=claude-swarm
+```
+
+### SwarmSDK Integration
+
+For complex non-Rails tickets, [SwarmSDK](https://github.com/parruda/swarm) provides a generic multi-agent team:
+
+```bash
+# Install SwarmSDK
+gem install swarm_sdk
+
+# Enable in Linear Autopilot (auto-routes complex tickets)
+SWARM_PATH=swarm
+```
+
+Tickets with complexity score ≥ threshold (default 6) are routed to SwarmSDK. Complexity is determined by:
+
+- Description length
+- Keywords: refactor, migrate, architecture, integration, etc.
 
 ## Cost Tracking
 
