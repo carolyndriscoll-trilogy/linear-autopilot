@@ -236,19 +236,16 @@ class Spawner {
       const validation = await validate(tenant.repoPath);
 
       if (!validation.passed) {
-        const validationSummary = formatValidationSummary(validation);
         logger.warn('Validation failed', {
           ticketId: ticket.identifier,
           results: validation.results.map((r) => ({ name: r.name, passed: r.passed })),
         });
-
-        // Fail the ticket with validation error
         await this.handleFailure(
           ticket,
           tenant,
           item,
           branchName,
-          `Validation failed:\n${validationSummary}`
+          `Validation failed:\n${formatValidationSummary(validation)}`
         );
         return;
       }
@@ -258,45 +255,8 @@ class Spawner {
         duration: validation.totalDuration,
       });
 
-      // Push branch and create PR
-      const prUrl = await this.createPullRequest(tenant, branchName, ticket, validation);
-
-      if (prUrl) {
-        // Notify: PR created
-        await notify(createPrCreatedEvent(ticket, tenant, branchName, prUrl));
-
-        // Add comment to Linear ticket with PR link and validation summary
-        const validationSummary = formatValidationSummary(validation);
-        await addComment(
-          ticket,
-          `✅ Implementation complete!\n\nPR: ${prUrl}\n\n${validationSummary}`
-        );
-
-        // Move to In Review
-        await updateTicketStatus(ticket, 'In Review');
-        logger.info('Created PR and moved ticket to In Review', {
-          ticketId: ticket.identifier,
-          prUrl,
-        });
-
-        // Record completion for dashboard
-        recordCompletion(ticket.identifier, tenant.name, duration, prUrl);
-      } else {
-        // No PR created (maybe no changes), just mark as done
-        await updateTicketStatus(ticket, 'Done');
-        logger.info('Marked ticket as Done (no PR needed)', { ticketId: ticket.identifier });
-
-        // Record completion for dashboard
-        recordCompletion(ticket.identifier, tenant.name, duration);
-      }
-
-      // Notify: agent completed
-      await notify(createAgentCompletedEvent(ticket, tenant, branchName, duration));
-
-      // Update memory with success
-      updateMemory(tenant.repoPath, {
-        learnings: [`Completed ${ticket.identifier}: ${ticket.title}`],
-      });
+      // Create PR and complete the ticket
+      await this.completeTicketWithPR(ticket, tenant, branchName, duration, validation);
     } catch (error) {
       logger.error('Error in post-success handling', {
         ticketId: ticket.identifier,
@@ -304,6 +264,39 @@ class Spawner {
       });
       await updateTicketStatus(ticket, 'Done');
     }
+  }
+
+  private async completeTicketWithPR(
+    ticket: LinearTicket,
+    tenant: TenantConfig,
+    branchName: string,
+    duration: number,
+    validation: import('../validation').ValidationSummary
+  ): Promise<void> {
+    const prUrl = await this.createPullRequest(tenant, branchName, ticket, validation);
+
+    if (prUrl) {
+      await notify(createPrCreatedEvent(ticket, tenant, branchName, prUrl));
+      await addComment(
+        ticket,
+        `✅ Implementation complete!\n\nPR: ${prUrl}\n\n${formatValidationSummary(validation)}`
+      );
+      await updateTicketStatus(ticket, 'In Review');
+      logger.info('Created PR and moved ticket to In Review', {
+        ticketId: ticket.identifier,
+        prUrl,
+      });
+      recordCompletion(ticket.identifier, tenant.name, duration, prUrl);
+    } else {
+      await updateTicketStatus(ticket, 'Done');
+      logger.info('Marked ticket as Done (no PR needed)', { ticketId: ticket.identifier });
+      recordCompletion(ticket.identifier, tenant.name, duration);
+    }
+
+    await notify(createAgentCompletedEvent(ticket, tenant, branchName, duration));
+    updateMemory(tenant.repoPath, {
+      learnings: [`Completed ${ticket.identifier}: ${ticket.title}`],
+    });
   }
 
   private async handleFailure(
@@ -320,17 +313,8 @@ class Spawner {
     });
 
     try {
-      // Clean up any partial branch
-      try {
-        execSync('git checkout main && git branch -D ' + branchName, {
-          cwd: tenant.repoPath,
-          stdio: 'pipe',
-        });
-      } catch {
-        // Ignore cleanup errors
-      }
+      this.cleanupBranch(tenant.repoPath, branchName);
 
-      // Notify: agent failed
       await notify(
         createAgentFailedEvent(
           ticket,
@@ -342,27 +326,30 @@ class Spawner {
         )
       );
 
-      // Add comment with error
       await addComment(
         ticket,
         `❌ Autopilot failed (attempt ${item.attempts + 1}/${MAX_RETRIES})\n\nError: ${errorMessage}`
       );
 
-      // Move back to Backlog
       await updateTicketStatus(ticket, 'Backlog');
-
-      // Update memory with error
-      updateMemory(tenant.repoPath, {
-        errors: [errorMessage],
-      });
-
-      // Requeue for retry
+      updateMemory(tenant.repoPath, { errors: [errorMessage] });
       ticketQueue.requeue(item);
     } catch (error) {
       logger.error('Error in failure handling', {
         ticketId: ticket.identifier,
         error: String(error),
       });
+    }
+  }
+
+  private cleanupBranch(repoPath: string, branchName: string): void {
+    try {
+      execSync(`git checkout main && git branch -D ${branchName}`, {
+        cwd: repoPath,
+        stdio: 'pipe',
+      });
+    } catch {
+      logger.debug('Branch cleanup skipped (branch may not exist)', { branchName });
     }
   }
 

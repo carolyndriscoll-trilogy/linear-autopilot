@@ -53,11 +53,12 @@ export async function send(
   );
 
   // Log any failures but don't fail the overall operation
-  const failures = results.filter((r) => r.status === 'rejected');
+  const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
   if (failures.length > 0) {
     logger.warn('Some notifications failed', {
       failed: failures.length,
       total: notifications.length,
+      reasons: failures.map((f) => String(f.reason)),
     });
   }
 }
