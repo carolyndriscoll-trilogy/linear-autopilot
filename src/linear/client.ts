@@ -1,24 +1,14 @@
 import { getConfig } from '../config';
 import { getStateId } from './states';
 import { logger } from '../logger';
-import {
-  LinearTicket,
-  LinearIssueResponse,
-  LinearMutationResponse,
-} from './types';
+import { MAX_RETRIES, RETRY_DELAY_MS } from '../constants';
+import { sleep } from '../utils';
+import { LinearTicket, LinearIssueResponse, LinearMutationResponse } from './types';
 
 // Rate limiting: 100 requests per minute
 const RATE_LIMIT_WINDOW_MS = 60000;
 const MAX_REQUESTS_PER_WINDOW = 100;
 const requestTimestamps: number[] = [];
-
-// Retry configuration
-const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY_MS = 1000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function waitForRateLimit(): Promise<void> {
   const now = Date.now();
@@ -47,7 +37,13 @@ interface GraphQLResponse {
   errors?: Array<{ message: string }>;
 }
 
-async function graphql<T extends GraphQLResponse>(
+function checkGraphQLErrors(data: GraphQLResponse): void {
+  if (data.errors && data.errors.length > 0) {
+    throw new Error(`Linear API error: ${data.errors[0].message}`);
+  }
+}
+
+export async function graphql<T extends GraphQLResponse>(
   query: string,
   variables: Record<string, unknown>,
   operationName?: string
@@ -64,7 +60,7 @@ async function graphql<T extends GraphQLResponse>(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': config.linearApiKey,
+          Authorization: config.linearApiKey,
         },
         body: JSON.stringify({ query, variables }),
       });
@@ -86,7 +82,7 @@ async function graphql<T extends GraphQLResponse>(
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt < MAX_RETRIES) {
-        const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+        const delayMs = RETRY_DELAY_MS * Math.pow(2, attempt);
         logger.warn('Linear API request failed, retrying', {
           attempt: attempt + 1,
           maxRetries: MAX_RETRIES,
@@ -130,9 +126,7 @@ export async function fetchTicket(ticketId: string): Promise<LinearTicket> {
     'GetIssue'
   );
 
-  if (data.errors) {
-    throw new Error(`Linear API error: ${data.errors[0].message}`);
-  }
+  checkGraphQLErrors(data);
 
   if (!data.data?.issue) {
     throw new Error(`Ticket ${ticketId} not found`);
@@ -156,9 +150,7 @@ export async function updateTicketStatus(ticket: LinearTicket, stateName: string
     'UpdateIssue'
   );
 
-  if (data.errors) {
-    throw new Error(`Linear API error: ${data.errors[0].message}`);
-  }
+  checkGraphQLErrors(data);
 
   if (!data.data?.issueUpdate?.success) {
     throw new Error(`Failed to update ${ticket.identifier} to ${stateName}`);
@@ -178,9 +170,7 @@ export async function addComment(ticket: LinearTicket, body: string): Promise<vo
     'CreateComment'
   );
 
-  if (data.errors) {
-    throw new Error(`Linear API error: ${data.errors[0].message}`);
-  }
+  checkGraphQLErrors(data);
 
   if (!data.data?.commentCreate?.success) {
     throw new Error(`Failed to add comment to ${ticket.identifier}`);
@@ -203,9 +193,7 @@ export async function createLabel(teamId: string, name: string, color: string): 
     'CreateLabel'
   );
 
-  if (data.errors) {
-    throw new Error(`Linear API error: ${data.errors[0].message}`);
-  }
+  checkGraphQLErrors(data);
 
   if (!data.data?.issueLabelCreate?.success || !data.data.issueLabelCreate.issueLabel) {
     throw new Error(`Failed to create label ${name}`);

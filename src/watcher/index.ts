@@ -1,8 +1,7 @@
 import { createHmac } from 'crypto';
 import express, { Request, Response } from 'express';
-import { getConfig } from '../config';
 import { getTenantByTeamId, getAllTenants } from '../config/tenants';
-import { fetchTicket, LinearTicket } from '../linear';
+import { fetchTicket, graphql, LinearTicket } from '../linear';
 import { ticketQueue } from '../spawner/queue';
 import { logger } from '../logger';
 
@@ -28,6 +27,7 @@ interface LinearLabel {
 }
 
 interface LinearLabelsResponse {
+  errors?: Array<{ message: string }>;
   data?: {
     issueLabels: {
       nodes: LinearLabel[];
@@ -38,27 +38,31 @@ interface LinearLabelsResponse {
 export function createWebhookRouter(): express.Router {
   const router = express.Router();
 
-  router.post('/linear', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
-    const webhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
+  router.post(
+    '/linear',
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
+      const webhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
 
-    if (webhookSecret) {
-      const signature = req.headers['linear-signature'] as string;
-      if (!verifyWebhookSignature(req.body, signature, webhookSecret)) {
-        logger.warn('Invalid webhook signature');
-        res.status(401).json({ error: 'Invalid signature' });
-        return;
+      if (webhookSecret) {
+        const signature = req.headers['linear-signature'] as string;
+        if (!verifyWebhookSignature(req.body, signature, webhookSecret)) {
+          logger.warn('Invalid webhook signature');
+          res.status(401).json({ error: 'Invalid signature' });
+          return;
+        }
+      }
+
+      try {
+        const payload = JSON.parse(req.body.toString()) as LinearWebhookPayload;
+        await handleWebhookEvent(payload);
+        res.status(200).json({ ok: true });
+      } catch (error) {
+        logger.error('Webhook processing error', { error: String(error) });
+        res.status(500).json({ error: 'Processing failed' });
       }
     }
-
-    try {
-      const payload = JSON.parse(req.body.toString()) as LinearWebhookPayload;
-      await handleWebhookEvent(payload);
-      res.status(200).json({ ok: true });
-    } catch (error) {
-      logger.error('Webhook processing error', { error: String(error) });
-      res.status(500).json({ error: 'Processing failed' });
-    }
-  });
+  );
 
   return router;
 }
@@ -98,7 +102,11 @@ async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> 
   const tenant = getTenantByTeamId(ticket.team.id);
 
   if (!tenant) {
-    logger.warn('No tenant config for team, skipping', { teamId: ticket.team.id, teamName: ticket.team.name, ticketId: issueId });
+    logger.warn('No tenant config for team, skipping', {
+      teamId: ticket.team.id,
+      teamName: ticket.team.name,
+      ticketId: issueId,
+    });
     return;
   }
 
@@ -117,31 +125,22 @@ async function checkAgentReadyLabelAdded(
 
   // Fetch label names to check if any is "agent-ready"
   try {
-    const config = getConfig();
-    const response = await fetch('https://api.linear.app/graphql', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': config.linearApiKey,
-      },
-      body: JSON.stringify({
-        query: `
-          query GetLabels($ids: [String!]!) {
-            issueLabels(filter: { id: { in: $ids } }) {
-              nodes {
-                id
-                name
-              }
+    const data = await graphql<LinearLabelsResponse>(
+      `
+        query GetLabels($ids: [String!]!) {
+          issueLabels(filter: { id: { in: $ids } }) {
+            nodes {
+              id
+              name
             }
           }
-        `,
-        variables: { ids: newLabelIds },
-      }),
-    });
+        }
+      `,
+      { ids: newLabelIds },
+      'GetLabels'
+    );
 
-    const data = (await response.json()) as LinearLabelsResponse;
     const labels = data.data?.issueLabels?.nodes || [];
-
     return labels.some((label) => label.name.toLowerCase() === AGENT_READY_LABEL);
   } catch (error) {
     logger.error('Error fetching labels', { error: String(error) });
@@ -186,43 +185,12 @@ export class PollingWatcher {
   }
 
   private async pollTenant(teamId: string): Promise<void> {
-    const config = getConfig();
     const tenant = getTenantByTeamId(teamId);
 
     if (!tenant) return;
 
-    // Fetch issues with agent-ready label
-    const response = await fetch('https://api.linear.app/graphql', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': config.linearApiKey,
-      },
-      body: JSON.stringify({
-        query: `
-          query GetAgentReadyIssues($teamId: String!) {
-            team(id: $teamId) {
-              issues(filter: {
-                labels: { name: { eq: "agent-ready" } }
-                state: { name: { in: ["Todo", "Backlog"] } }
-              }, first: 10) {
-                nodes {
-                  id
-                  identifier
-                  title
-                  description
-                  state { id name }
-                  team { id name }
-                }
-              }
-            }
-          }
-        `,
-        variables: { teamId },
-      }),
-    });
-
     interface PollResponse {
+      errors?: Array<{ message: string }>;
       data?: {
         team?: {
           issues: {
@@ -232,7 +200,40 @@ export class PollingWatcher {
       };
     }
 
-    const data = (await response.json()) as PollResponse;
+    // Fetch issues with agent-ready label (uses shared graphql with rate limiting & retries)
+    const data = await graphql<PollResponse>(
+      `
+        query GetAgentReadyIssues($teamId: String!) {
+          team(id: $teamId) {
+            issues(
+              filter: {
+                labels: { name: { eq: "agent-ready" } }
+                state: { name: { in: ["Todo", "Backlog"] } }
+              }
+              first: 10
+            ) {
+              nodes {
+                id
+                identifier
+                title
+                description
+                state {
+                  id
+                  name
+                }
+                team {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        }
+      `,
+      { teamId },
+      'GetAgentReadyIssues'
+    );
+
     const issues = data.data?.team?.issues?.nodes || [];
 
     for (const issue of issues) {

@@ -38,9 +38,15 @@ export async function send(
 
       try {
         await provider.send(event, notification.config);
-        logger.debug('Notification sent', { type: notification.type, ticketId: event.ticket.identifier });
+        logger.debug('Notification sent', {
+          type: notification.type,
+          ticketId: event.ticket.identifier,
+        });
       } catch (error) {
-        logger.error('Failed to send notification', { type: notification.type, error: String(error) });
+        logger.error('Failed to send notification', {
+          type: notification.type,
+          error: String(error),
+        });
         throw error;
       }
     })
@@ -49,29 +55,39 @@ export async function send(
   // Log any failures but don't fail the overall operation
   const failures = results.filter((r) => r.status === 'rejected');
   if (failures.length > 0) {
-    logger.warn('Some notifications failed', { failed: failures.length, total: notifications.length });
+    logger.warn('Some notifications failed', {
+      failed: failures.length,
+      total: notifications.length,
+    });
   }
 }
 
-export async function notify(
-  event: NotificationEvent
-): Promise<void> {
+export async function notify(event: NotificationEvent): Promise<void> {
   return send(event, event.tenant.notifications);
 }
 
-// Convenience functions for creating events
+// Event factory helpers
+type BaseEventParams = {
+  ticket: NotificationEvent['ticket'];
+  tenant: NotificationEvent['tenant'];
+  branchName: string;
+};
+
+function createBaseEvent(params: BaseEventParams) {
+  return {
+    ticket: params.ticket,
+    tenant: params.tenant,
+    branchName: params.branchName,
+    timestamp: new Date(),
+  };
+}
+
 export function createAgentStartedEvent(
   ticket: NotificationEvent['ticket'],
   tenant: NotificationEvent['tenant'],
   branchName: string
 ): NotificationEvent {
-  return {
-    type: 'agent-started',
-    ticket,
-    tenant,
-    branchName,
-    timestamp: new Date(),
-  };
+  return { type: 'agent-started', ...createBaseEvent({ ticket, tenant, branchName }) };
 }
 
 export function createAgentCompletedEvent(
@@ -80,14 +96,7 @@ export function createAgentCompletedEvent(
   branchName: string,
   duration: number
 ): NotificationEvent {
-  return {
-    type: 'agent-completed',
-    ticket,
-    tenant,
-    branchName,
-    duration,
-    timestamp: new Date(),
-  };
+  return { type: 'agent-completed', ...createBaseEvent({ ticket, tenant, branchName }), duration };
 }
 
 export function createAgentFailedEvent(
@@ -100,13 +109,10 @@ export function createAgentFailedEvent(
 ): NotificationEvent {
   return {
     type: 'agent-failed',
-    ticket,
-    tenant,
-    branchName,
+    ...createBaseEvent({ ticket, tenant, branchName }),
     error,
     attempt,
     maxAttempts,
-    timestamp: new Date(),
   };
 }
 
@@ -119,12 +125,9 @@ export function createAgentStuckEvent(
 ): NotificationEvent {
   return {
     type: 'agent-stuck',
-    ticket,
-    tenant,
-    branchName,
+    ...createBaseEvent({ ticket, tenant, branchName }),
     runningFor,
     lastActivity,
-    timestamp: new Date(),
   };
 }
 
@@ -134,12 +137,5 @@ export function createPrCreatedEvent(
   branchName: string,
   prUrl: string
 ): NotificationEvent {
-  return {
-    type: 'pr-created',
-    ticket,
-    tenant,
-    branchName,
-    prUrl,
-    timestamp: new Date(),
-  };
+  return { type: 'pr-created', ...createBaseEvent({ ticket, tenant, branchName }), prUrl };
 }
