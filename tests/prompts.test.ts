@@ -1,9 +1,16 @@
 // tests/prompts.test.ts
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
+const emptyMemory = {
+  patterns: [],
+  commonErrors: [],
+  fileStructure: '',
+  lastUpdated: new Date(),
+};
+
 // Mock the memory module before importing prompts
 jest.mock('../src/memory', () => ({
-  getMemory: jest.fn().mockReturnValue(null),
+  getMemory: jest.fn().mockReturnValue(emptyMemory),
   formatMemoryForPrompt: jest.fn().mockReturnValue(''),
 }));
 
@@ -17,7 +24,7 @@ const mockFormatMemory = formatMemoryForPrompt as jest.MockedFunction<typeof for
 describe('prompts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetMemory.mockReturnValue(null);
+    mockGetMemory.mockReturnValue(emptyMemory);
     mockFormatMemory.mockReturnValue('');
   });
 
@@ -113,7 +120,7 @@ describe('prompts', () => {
     });
 
     it('should include memory when includeMemory is true', () => {
-      mockGetMemory.mockReturnValue({ sessions: [] } as any);
+      mockGetMemory.mockReturnValue(emptyMemory);
       mockFormatMemory.mockReturnValue('Previous context info');
 
       const ticket = createMockTicket();
@@ -131,7 +138,7 @@ describe('prompts', () => {
     });
 
     it('should not include memory section when formatMemoryForPrompt returns empty', () => {
-      mockGetMemory.mockReturnValue({ sessions: [] } as any);
+      mockGetMemory.mockReturnValue(emptyMemory);
       mockFormatMemory.mockReturnValue('');
 
       const ticket = createMockTicket();

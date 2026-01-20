@@ -16,8 +16,7 @@ import { logger } from '../logger';
 import { validate, formatValidationSummary } from '../validation';
 import { recordUsage } from '../tracking';
 import { recordCompletion } from '../dashboard';
-
-const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
+import { STUCK_THRESHOLD_MS, MAX_RETRIES } from '../constants';
 
 interface ActiveAgent {
   ticket: LinearTicket;
@@ -325,13 +324,20 @@ class Spawner {
 
       // Notify: agent failed
       await notify(
-        createAgentFailedEvent(ticket, tenant, branchName, errorMessage, item.attempts + 1, 3)
+        createAgentFailedEvent(
+          ticket,
+          tenant,
+          branchName,
+          errorMessage,
+          item.attempts + 1,
+          MAX_RETRIES
+        )
       );
 
       // Add comment with error
       await addComment(
         ticket,
-        `❌ Autopilot failed (attempt ${item.attempts + 1}/3)\n\nError: ${errorMessage}`
+        `❌ Autopilot failed (attempt ${item.attempts + 1}/${MAX_RETRIES})\n\nError: ${errorMessage}`
       );
 
       // Move back to Backlog

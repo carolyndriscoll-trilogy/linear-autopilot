@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { logger } from '../logger';
+import { MEMORY_LIMITS } from '../constants';
 
 export interface RepoMemory {
   patterns: string[];
@@ -87,8 +88,8 @@ export function updateMemory(repoPath: string, session: SessionLearnings): void 
         memory.commonErrors.push(error);
       }
     }
-    // Keep only the last 20 errors
-    memory.commonErrors = memory.commonErrors.slice(-20);
+    // Keep only the most recent errors
+    memory.commonErrors = memory.commonErrors.slice(-MEMORY_LIMITS.maxErrors);
   }
 
   if (session.learnings) {
@@ -97,8 +98,8 @@ export function updateMemory(repoPath: string, session: SessionLearnings): void 
         memory.patterns.push(learning);
       }
     }
-    // Keep only the last 30 patterns
-    memory.patterns = memory.patterns.slice(-30);
+    // Keep only the most recent patterns
+    memory.patterns = memory.patterns.slice(-MEMORY_LIMITS.maxPatterns);
   }
 
   if (session.fileStructure) {
@@ -117,7 +118,9 @@ export function formatMemoryForPrompt(memory: RepoMemory): string {
   }
 
   if (memory.commonErrors.length > 0) {
-    sections.push(`**Errors to avoid (seen in previous sessions):**\n${memory.commonErrors.map((e) => `- ${e}`).join('\n')}`);
+    sections.push(
+      `**Errors to avoid (seen in previous sessions):**\n${memory.commonErrors.map((e) => `- ${e}`).join('\n')}`
+    );
   }
 
   if (memory.fileStructure) {

@@ -1,6 +1,7 @@
 import { LinearTicket } from '../linear';
 import { TenantConfig } from '../config/tenants';
 import { logger } from '../logger';
+import { MAX_RETRIES } from '../constants';
 
 export interface QueuedTicket {
   ticket: LinearTicket;
@@ -26,7 +27,12 @@ class TicketQueue {
       enqueuedAt: new Date(),
       attempts: 0,
     });
-    logger.info('Enqueued ticket', { ticketId: ticket.identifier, title: ticket.title, queueSize: this.queue.length, tenant: tenant.name });
+    logger.info('Enqueued ticket', {
+      ticketId: ticket.identifier,
+      title: ticket.title,
+      queueSize: this.queue.length,
+      tenant: tenant.name,
+    });
   }
 
   dequeue(): QueuedTicket | undefined {
@@ -51,11 +57,14 @@ class TicketQueue {
 
   requeue(item: QueuedTicket): void {
     item.attempts++;
-    if (item.attempts < 3) {
+    if (item.attempts < MAX_RETRIES) {
       this.queue.push(item);
       logger.info('Requeued ticket', { ticketId: item.ticket.identifier, attempt: item.attempts });
     } else {
-      logger.warn('Dropped ticket after max attempts', { ticketId: item.ticket.identifier, attempts: item.attempts });
+      logger.warn('Dropped ticket after max attempts', {
+        ticketId: item.ticket.identifier,
+        attempts: item.attempts,
+      });
     }
   }
 

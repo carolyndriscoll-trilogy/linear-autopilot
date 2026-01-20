@@ -1,15 +1,8 @@
 import { NotificationEvent } from './types';
+import { COLORS } from '../constants';
+import { formatDuration } from '../utils';
 
 export type MessageFormat = 'markdown' | 'plain' | 'slack-blocks' | 'discord-embed';
-
-function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`;
-  }
-  return `${seconds}s`;
-}
 
 function getEmoji(event: NotificationEvent): string {
   switch (event.type) {
@@ -44,15 +37,15 @@ function getTitle(event: NotificationEvent): string {
 function getColor(event: NotificationEvent): string {
   switch (event.type) {
     case 'agent-started':
-      return '#3b82f6'; // blue
+      return COLORS.info;
     case 'agent-completed':
-      return '#22c55e'; // green
+      return COLORS.success;
     case 'agent-failed':
-      return '#ef4444'; // red
+      return COLORS.error;
     case 'agent-stuck':
-      return '#f59e0b'; // amber
+      return COLORS.warning;
     case 'pr-created':
-      return '#8b5cf6'; // purple
+      return COLORS.started;
   }
 }
 
@@ -175,8 +168,16 @@ export function formatDiscordEmbed(event: NotificationEvent): object {
       fields.push({ name: 'Duration', value: formatDuration(event.duration), inline: true });
       break;
     case 'agent-failed':
-      fields.push({ name: 'Attempt', value: `${event.attempt}/${event.maxAttempts}`, inline: true });
-      fields.push({ name: 'Error', value: `\`\`\`${event.error.slice(0, 500)}\`\`\``, inline: false });
+      fields.push({
+        name: 'Attempt',
+        value: `${event.attempt}/${event.maxAttempts}`,
+        inline: true,
+      });
+      fields.push({
+        name: 'Error',
+        value: `\`\`\`${event.error.slice(0, 500)}\`\`\``,
+        inline: false,
+      });
       break;
     case 'agent-stuck':
       fields.push({ name: 'Running for', value: formatDuration(event.runningFor), inline: true });
