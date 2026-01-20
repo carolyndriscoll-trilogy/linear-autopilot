@@ -16,7 +16,6 @@ import { logger } from '../logger';
 import { validate, formatValidationSummary } from '../validation';
 import { recordUsage } from '../tracking';
 import { recordCompletion } from '../dashboard';
-import { coordination, AgentContext } from '../coordination';
 
 const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
@@ -26,7 +25,6 @@ interface ActiveAgent {
   startedAt: Date;
   branchName: string;
   notifiedStuck: boolean;
-  coordinationContext?: AgentContext;
 }
 
 class Spawner {
@@ -130,31 +128,12 @@ class Spawner {
       branchName,
     });
 
-    // Register with coordination system (MCP Agent Mail)
-    const coordCtx = await coordination.registerAgent(ticket, tenant);
-
-    // Try to reserve project files if coordination is enabled
-    if (coordination.isEnabled()) {
-      const reserved = await coordination.reserveProjectFiles(coordCtx);
-      if (!reserved) {
-        logger.warn('Could not reserve files, another agent may be working', {
-          ticketId: ticket.identifier,
-          tenant: tenant.name,
-        });
-        // Requeue and try again later
-        ticketQueue.requeue(item);
-        await coordination.releaseAgent(coordCtx);
-        return;
-      }
-    }
-
     this.activeAgents.set(ticket.identifier, {
       ticket,
       tenant,
       startedAt: new Date(),
       branchName,
       notifiedStuck: false,
-      coordinationContext: coordCtx,
     });
 
     try {
@@ -179,24 +158,21 @@ class Spawner {
       recordUsage(tenant.repoPath, ticket.identifier, result.output, tenant.name);
 
       if (result.success) {
-        await this.handleSuccess(ticket, tenant, item, branchName, duration, coordCtx);
+        await this.handleSuccess(ticket, tenant, item, branchName, duration);
       } else {
         await this.handleFailure(
           ticket,
           tenant,
           item,
           branchName,
-          'Claude Code exited with errors',
-          coordCtx
+          'Claude Code exited with errors'
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await this.handleFailure(ticket, tenant, item, branchName, message, coordCtx);
+      await this.handleFailure(ticket, tenant, item, branchName, message);
     } finally {
       this.activeAgents.delete(ticket.identifier);
-      // Release coordination resources
-      await coordination.releaseAgent(coordCtx);
     }
   }
 
@@ -241,8 +217,7 @@ class Spawner {
     tenant: TenantConfig,
     item: QueuedTicket,
     branchName: string,
-    duration: number,
-    coordCtx?: AgentContext
+    duration: number
   ): Promise<void> {
     logger.info('Agent completed, running validation', {
       ticketId: ticket.identifier,
@@ -266,8 +241,7 @@ class Spawner {
           tenant,
           item,
           branchName,
-          `Validation failed:\n${validationSummary}`,
-          coordCtx
+          `Validation failed:\n${validationSummary}`
         );
         return;
       }
@@ -316,14 +290,6 @@ class Spawner {
       updateMemory(tenant.repoPath, {
         learnings: [`Completed ${ticket.identifier}: ${ticket.title}`],
       });
-
-      // Notify other agents via coordination system
-      if (coordCtx) {
-        await coordination.notifyCompletion(
-          coordCtx,
-          `PR created: ${prUrl ?? 'No changes needed'}`
-        );
-      }
     } catch (error) {
       logger.error('Error in post-success handling', {
         ticketId: ticket.identifier,
@@ -338,8 +304,7 @@ class Spawner {
     tenant: TenantConfig,
     item: QueuedTicket,
     branchName: string,
-    errorMessage: string,
-    coordCtx?: AgentContext
+    errorMessage: string
   ): Promise<void> {
     logger.error('Agent failed', {
       ticketId: ticket.identifier,
@@ -376,11 +341,6 @@ class Spawner {
       updateMemory(tenant.repoPath, {
         errors: [errorMessage],
       });
-
-      // Notify other agents via coordination system
-      if (coordCtx) {
-        await coordination.notifyFailure(coordCtx, errorMessage);
-      }
 
       // Requeue for retry
       ticketQueue.requeue(item);

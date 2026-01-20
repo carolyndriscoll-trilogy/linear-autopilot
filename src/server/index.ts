@@ -1,11 +1,10 @@
 import express from 'express';
-import { validateConfig, getConfig } from '../config';
+import { validateConfig } from '../config';
 import { getAllTenants } from '../config/tenants';
 import { createWebhookRouter, PollingWatcher } from '../watcher';
 import { spawner } from '../spawner';
 import { logger } from '../logger';
 import { createDashboardRouter } from '../dashboard';
-import { mcpAgentMail } from '../coordination';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const POLLING_INTERVAL = parseInt(process.env.LINEAR_POLLING_INTERVAL_MS || '0', 10);
@@ -16,15 +15,6 @@ let isShuttingDown = false;
 export async function startServer(): Promise<void> {
   // Validate configuration
   validateConfig();
-  const config = getConfig();
-
-  // Initialize MCP Agent Mail coordination (if enabled)
-  mcpAgentMail.configure(config.mcpAgentMail);
-  if (config.mcpAgentMail.enabled) {
-    logger.info('MCP Agent Mail coordination enabled', {
-      url: config.mcpAgentMail.baseUrl,
-    });
-  }
 
   const tenants = getAllTenants();
   if (tenants.length === 0) {
