@@ -4,49 +4,28 @@ import { formatDuration } from '../utils';
 
 export type MessageFormat = 'markdown' | 'plain' | 'slack-blocks' | 'discord-embed';
 
+// Consolidated event metadata to avoid repetitive switch statements
+const EVENT_METADATA: Record<
+  NotificationEvent['type'],
+  { emoji: string; title: string; color: string }
+> = {
+  'agent-started': { emoji: '🚀', title: 'Agent Started', color: COLORS.info },
+  'agent-completed': { emoji: '✅', title: 'Agent Completed', color: COLORS.success },
+  'agent-failed': { emoji: '❌', title: 'Agent Failed', color: COLORS.error },
+  'agent-stuck': { emoji: '⚠️', title: 'Agent Stuck', color: COLORS.warning },
+  'pr-created': { emoji: '🔗', title: 'PR Created', color: COLORS.started },
+};
+
 function getEmoji(event: NotificationEvent): string {
-  switch (event.type) {
-    case 'agent-started':
-      return '🚀';
-    case 'agent-completed':
-      return '✅';
-    case 'agent-failed':
-      return '❌';
-    case 'agent-stuck':
-      return '⚠️';
-    case 'pr-created':
-      return '🔗';
-  }
+  return EVENT_METADATA[event.type].emoji;
 }
 
 function getTitle(event: NotificationEvent): string {
-  switch (event.type) {
-    case 'agent-started':
-      return 'Agent Started';
-    case 'agent-completed':
-      return 'Agent Completed';
-    case 'agent-failed':
-      return 'Agent Failed';
-    case 'agent-stuck':
-      return 'Agent Stuck';
-    case 'pr-created':
-      return 'PR Created';
-  }
+  return EVENT_METADATA[event.type].title;
 }
 
 function getColor(event: NotificationEvent): string {
-  switch (event.type) {
-    case 'agent-started':
-      return COLORS.info;
-    case 'agent-completed':
-      return COLORS.success;
-    case 'agent-failed':
-      return COLORS.error;
-    case 'agent-stuck':
-      return COLORS.warning;
-    case 'pr-created':
-      return COLORS.started;
-  }
+  return EVENT_METADATA[event.type].color;
 }
 
 export function formatPlain(event: NotificationEvent): string {

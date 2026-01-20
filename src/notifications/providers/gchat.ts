@@ -1,5 +1,6 @@
 import { NotificationProvider, NotificationEvent } from '../types';
 import { formatPlain } from '../formatter';
+import { sendWebhook } from '../webhook';
 
 export const gchatProvider: NotificationProvider = {
   name: 'gchat',
@@ -13,15 +14,6 @@ export const gchatProvider: NotificationProvider = {
 
     // Google Chat uses a simpler format
     const text = formatPlain(event);
-
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Google Chat webhook failed: ${response.status} ${response.statusText}`);
-    }
+    await sendWebhook(webhookUrl, { text }, 'Google Chat');
   },
 };

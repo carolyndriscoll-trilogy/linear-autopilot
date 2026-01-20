@@ -16,7 +16,12 @@ import { logger } from '../logger';
 import { validate, formatValidationSummary } from '../validation';
 import { recordUsage } from '../tracking';
 import { recordCompletion } from '../dashboard';
-import { STUCK_THRESHOLD_MS, MAX_RETRIES } from '../constants';
+import {
+  STUCK_THRESHOLD_MS,
+  MAX_RETRIES,
+  SPAWNER_POLL_INTERVAL_MS,
+  SPAWNER_HEALTH_CHECK_INTERVAL_MS,
+} from '../constants';
 
 interface ActiveAgent {
   ticket: LinearTicket;
@@ -48,8 +53,11 @@ class Spawner {
     if (this.isRunning) return;
     this.isRunning = true;
     logger.info('Spawner started');
-    this.pollInterval = setInterval(() => this.processQueue(), 2000);
-    this.healthCheckInterval = setInterval(() => this.checkStuckAgents(), 60000);
+    this.pollInterval = setInterval(() => this.processQueue(), SPAWNER_POLL_INTERVAL_MS);
+    this.healthCheckInterval = setInterval(
+      () => this.checkStuckAgents(),
+      SPAWNER_HEALTH_CHECK_INTERVAL_MS
+    );
   }
 
   stop(): void {

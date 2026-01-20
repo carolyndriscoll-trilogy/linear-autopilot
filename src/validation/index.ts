@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../logger';
+import { VALIDATION_TIMEOUT_MS } from '../constants';
 
 export interface ValidationResult {
   name: string;
@@ -49,7 +50,7 @@ function runCommand(
     const result = spawnSync(command, args, {
       cwd: repoPath,
       encoding: 'utf-8',
-      timeout: 300000, // 5 minute timeout
+      timeout: VALIDATION_TIMEOUT_MS,
       env: { ...process.env, CI: 'true' },
     });
 

@@ -1,40 +1,26 @@
-import { getConfig } from '../config';
+import { graphql } from './client';
 import { LinearState, LinearStatesResponse } from './types';
 
 // Cache states per team: teamId -> (stateName -> stateId)
 const statesCache = new Map<string, Map<string, string>>();
 
 async function fetchStatesForTeam(teamId: string): Promise<Map<string, string>> {
-  const config = getConfig();
-
-  const response = await fetch('https://api.linear.app/graphql', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': config.linearApiKey,
-    },
-    body: JSON.stringify({
-      query: `
-        query GetStates($teamId: String!) {
-          team(id: $teamId) {
-            states {
-              nodes {
-                id
-                name
-              }
+  const data = await graphql<LinearStatesResponse>(
+    `
+      query GetStates($teamId: String!) {
+        team(id: $teamId) {
+          states {
+            nodes {
+              id
+              name
             }
           }
         }
-      `,
-      variables: { teamId },
-    }),
-  });
-
-  const data = (await response.json()) as LinearStatesResponse;
-
-  if (data.errors) {
-    throw new Error(`Linear API error: ${data.errors[0].message}`);
-  }
+      }
+    `,
+    { teamId },
+    'GetStates'
+  );
 
   if (!data.data?.team?.states?.nodes) {
     throw new Error(`Failed to fetch states for team ${teamId}`);

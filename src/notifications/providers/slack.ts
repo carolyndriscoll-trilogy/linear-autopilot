@@ -1,5 +1,6 @@
 import { NotificationProvider, NotificationEvent } from '../types';
 import { formatSlackBlocks } from '../formatter';
+import { sendWebhook } from '../webhook';
 
 export const slackProvider: NotificationProvider = {
   name: 'slack',
@@ -12,15 +13,6 @@ export const slackProvider: NotificationProvider = {
     }
 
     const payload = formatSlackBlocks(event);
-
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Slack webhook failed: ${response.status} ${response.statusText}`);
-    }
+    await sendWebhook(webhookUrl, payload, 'Slack');
   },
 };

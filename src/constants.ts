@@ -8,6 +8,13 @@ export const RETRY_DELAY_MS = 1000;
 // Agent timeouts
 export const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10);
 
+// Spawner intervals
+export const SPAWNER_POLL_INTERVAL_MS = 2000;
+export const SPAWNER_HEALTH_CHECK_INTERVAL_MS = 60000;
+
+// Validation
+export const VALIDATION_TIMEOUT_MS = 300000; // 5 minutes
+
 // Notification colors (hex)
 export const COLORS = {
   success: '#22c55e', // green
