@@ -1,6 +1,11 @@
 export interface Config {
   linearApiKey: string;
   defaultRepoPath?: string;
+  mcpAgentMail: {
+    enabled: boolean;
+    baseUrl: string;
+    bearerToken?: string;
+  };
 }
 
 function getRequiredEnv(name: string): string {
@@ -25,6 +30,11 @@ export function getConfig(): Config {
   cachedConfig = {
     linearApiKey: getRequiredEnv('LINEAR_API_KEY'),
     defaultRepoPath: getOptionalEnv('DEFAULT_REPO_PATH'),
+    mcpAgentMail: {
+      enabled: getOptionalEnv('MCP_AGENT_MAIL_ENABLED') === 'true',
+      baseUrl: getOptionalEnv('MCP_AGENT_MAIL_URL') ?? 'http://localhost:8000',
+      bearerToken: getOptionalEnv('MCP_AGENT_MAIL_TOKEN'),
+    },
   };
 
   return cachedConfig;

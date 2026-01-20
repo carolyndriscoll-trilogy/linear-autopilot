@@ -116,17 +116,20 @@ Open http://localhost:3000/dashboard to view the dashboard.
 
 ### Environment Variables
 
-| Variable                     | Description                          | Default  |
-| ---------------------------- | ------------------------------------ | -------- |
-| `LINEAR_API_KEY`             | Linear API key (required)            | -        |
-| `LINEAR_WEBHOOK_SECRET`      | Webhook signature secret             | -        |
-| `LINEAR_POLLING_INTERVAL_MS` | Polling interval (0 = webhooks only) | `0`      |
-| `GITHUB_TOKEN`               | GitHub token for PR creation         | -        |
-| `PORT`                       | Server port                          | `3000`   |
-| `LOG_LEVEL`                  | Log level (debug/info/warn/error)    | `info`   |
-| `LOG_FILE`                   | Optional log file path               | -        |
-| `COVERAGE_THRESHOLD`         | Minimum coverage % required          | `0`      |
-| `AGENT_STUCK_THRESHOLD_MS`   | Stuck detection threshold            | `600000` |
+| Variable                     | Description                          | Default                 |
+| ---------------------------- | ------------------------------------ | ----------------------- |
+| `LINEAR_API_KEY`             | Linear API key (required)            | -                       |
+| `LINEAR_WEBHOOK_SECRET`      | Webhook signature secret             | -                       |
+| `LINEAR_POLLING_INTERVAL_MS` | Polling interval (0 = webhooks only) | `0`                     |
+| `GITHUB_TOKEN`               | GitHub token for PR creation         | -                       |
+| `PORT`                       | Server port                          | `3000`                  |
+| `LOG_LEVEL`                  | Log level (debug/info/warn/error)    | `info`                  |
+| `LOG_FILE`                   | Optional log file path               | -                       |
+| `COVERAGE_THRESHOLD`         | Minimum coverage % required          | `0`                     |
+| `AGENT_STUCK_THRESHOLD_MS`   | Stuck detection threshold            | `600000`                |
+| `MCP_AGENT_MAIL_ENABLED`     | Enable multi-agent coordination      | `false`                 |
+| `MCP_AGENT_MAIL_URL`         | MCP Agent Mail server URL            | `http://localhost:8000` |
+| `MCP_AGENT_MAIL_TOKEN`       | Bearer token for authentication      | -                       |
 
 ### Tenant Configuration
 
@@ -213,6 +216,7 @@ docker-compose up -d
 ```
 src/
 ├── config/          # Environment and tenant configuration
+├── coordination/    # MCP Agent Mail integration
 ├── dashboard/       # Web dashboard and API
 ├── linear/          # Linear API client with rate limiting
 ├── logger/          # Structured JSON logging
@@ -236,6 +240,33 @@ Before creating a PR, Autopilot runs:
 4. **Coverage** — Checks against `COVERAGE_THRESHOLD` (if set)
 
 If any step fails, the ticket is moved back to Backlog with an error comment.
+
+## Multi-Agent Coordination
+
+When running multiple concurrent agents (`maxConcurrentAgents > 1`), enable [MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail) integration to prevent conflicts:
+
+```bash
+# Install and run MCP Agent Mail
+curl -sSL https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/install.sh | bash
+mcp-agent-mail
+
+# Enable in Linear Autopilot
+MCP_AGENT_MAIL_ENABLED=true
+MCP_AGENT_MAIL_URL=http://localhost:8000
+```
+
+### How It Works
+
+1. **File Reservations** — Before editing, agents reserve `src/**/*` to signal intent
+2. **Conflict Detection** — If files are reserved, the ticket is requeued for later
+3. **Agent Messaging** — Agents notify others about completions and failures
+4. **Automatic Cleanup** — Reservations are released when agents finish
+
+### Benefits
+
+- Prevents merge conflicts when multiple agents work on the same repo
+- Agents share context about changes via messaging
+- Full audit trail of agent activity (Git-backed)
 
 ## Cost Tracking
 

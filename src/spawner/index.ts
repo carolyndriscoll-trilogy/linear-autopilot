@@ -16,6 +16,7 @@ import { logger } from '../logger';
 import { validate, formatValidationSummary } from '../validation';
 import { recordUsage } from '../tracking';
 import { recordCompletion } from '../dashboard';
+import { coordination, AgentContext } from '../coordination';
 
 const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10); // 10 min default
 
@@ -25,6 +26,7 @@ interface ActiveAgent {
   startedAt: Date;
   branchName: string;
   notifiedStuck: boolean;
+  coordinationContext?: AgentContext;
 }
 
 class Spawner {
@@ -37,9 +39,8 @@ class Spawner {
     if (!tenantId) {
       return this.activeAgents.size;
     }
-    return Array.from(this.activeAgents.values()).filter(
-      (a) => a.tenant.linearTeamId === tenantId
-    ).length;
+    return Array.from(this.activeAgents.values()).filter((a) => a.tenant.linearTeamId === tenantId)
+      .length;
   }
 
   canSpawnForTenant(tenant: TenantConfig): boolean {
@@ -81,7 +82,11 @@ class Spawner {
       const runningFor = now - agent.startedAt.getTime();
 
       if (runningFor > STUCK_THRESHOLD_MS && !agent.notifiedStuck) {
-        logger.warn('Agent appears stuck', { ticketId, runningForMinutes: Math.round(runningFor / 60000), tenant: agent.tenant.name });
+        logger.warn('Agent appears stuck', {
+          ticketId,
+          runningForMinutes: Math.round(runningFor / 60000),
+          tenant: agent.tenant.name,
+        });
 
         agent.notifiedStuck = true;
 
@@ -118,7 +123,30 @@ class Spawner {
     const branchName = ticket.identifier.toLowerCase();
     const startTime = Date.now();
 
-    logger.info('Spawning agent', { ticketId: ticket.identifier, title: ticket.title, tenant: tenant.name, branchName });
+    logger.info('Spawning agent', {
+      ticketId: ticket.identifier,
+      title: ticket.title,
+      tenant: tenant.name,
+      branchName,
+    });
+
+    // Register with coordination system (MCP Agent Mail)
+    const coordCtx = await coordination.registerAgent(ticket, tenant);
+
+    // Try to reserve project files if coordination is enabled
+    if (coordination.isEnabled()) {
+      const reserved = await coordination.reserveProjectFiles(coordCtx);
+      if (!reserved) {
+        logger.warn('Could not reserve files, another agent may be working', {
+          ticketId: ticket.identifier,
+          tenant: tenant.name,
+        });
+        // Requeue and try again later
+        ticketQueue.requeue(item);
+        await coordination.releaseAgent(coordCtx);
+        return;
+      }
+    }
 
     this.activeAgents.set(ticket.identifier, {
       ticket,
@@ -126,6 +154,7 @@ class Spawner {
       startedAt: new Date(),
       branchName,
       notifiedStuck: false,
+      coordinationContext: coordCtx,
     });
 
     try {
@@ -150,19 +179,31 @@ class Spawner {
       recordUsage(tenant.repoPath, ticket.identifier, result.output, tenant.name);
 
       if (result.success) {
-        await this.handleSuccess(ticket, tenant, item, branchName, duration);
+        await this.handleSuccess(ticket, tenant, item, branchName, duration, coordCtx);
       } else {
-        await this.handleFailure(ticket, tenant, item, branchName, 'Claude Code exited with errors');
+        await this.handleFailure(
+          ticket,
+          tenant,
+          item,
+          branchName,
+          'Claude Code exited with errors',
+          coordCtx
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await this.handleFailure(ticket, tenant, item, branchName, message);
+      await this.handleFailure(ticket, tenant, item, branchName, message, coordCtx);
     } finally {
       this.activeAgents.delete(ticket.identifier);
+      // Release coordination resources
+      await coordination.releaseAgent(coordCtx);
     }
   }
 
-  private runClaudeCode(prompt: string, repoPath: string): Promise<{ success: boolean; output: string }> {
+  private runClaudeCode(
+    prompt: string,
+    repoPath: string
+  ): Promise<{ success: boolean; output: string }> {
     return new Promise((resolve) => {
       const claude = spawn('claude', ['-p', '--dangerously-skip-permissions', prompt], {
         cwd: repoPath,
@@ -200,9 +241,13 @@ class Spawner {
     tenant: TenantConfig,
     item: QueuedTicket,
     branchName: string,
-    duration: number
+    duration: number,
+    coordCtx?: AgentContext
   ): Promise<void> {
-    logger.info('Agent completed, running validation', { ticketId: ticket.identifier, tenant: tenant.name });
+    logger.info('Agent completed, running validation', {
+      ticketId: ticket.identifier,
+      tenant: tenant.name,
+    });
 
     try {
       // Run validation before creating PR
@@ -210,7 +255,10 @@ class Spawner {
 
       if (!validation.passed) {
         const validationSummary = formatValidationSummary(validation);
-        logger.warn('Validation failed', { ticketId: ticket.identifier, results: validation.results.map(r => ({ name: r.name, passed: r.passed })) });
+        logger.warn('Validation failed', {
+          ticketId: ticket.identifier,
+          results: validation.results.map((r) => ({ name: r.name, passed: r.passed })),
+        });
 
         // Fail the ticket with validation error
         await this.handleFailure(
@@ -218,12 +266,16 @@ class Spawner {
           tenant,
           item,
           branchName,
-          `Validation failed:\n${validationSummary}`
+          `Validation failed:\n${validationSummary}`,
+          coordCtx
         );
         return;
       }
 
-      logger.info('Validation passed', { ticketId: ticket.identifier, duration: validation.totalDuration });
+      logger.info('Validation passed', {
+        ticketId: ticket.identifier,
+        duration: validation.totalDuration,
+      });
 
       // Push branch and create PR
       const prUrl = await this.createPullRequest(tenant, branchName, ticket, validation);
@@ -234,11 +286,17 @@ class Spawner {
 
         // Add comment to Linear ticket with PR link and validation summary
         const validationSummary = formatValidationSummary(validation);
-        await addComment(ticket, `✅ Implementation complete!\n\nPR: ${prUrl}\n\n${validationSummary}`);
+        await addComment(
+          ticket,
+          `✅ Implementation complete!\n\nPR: ${prUrl}\n\n${validationSummary}`
+        );
 
         // Move to In Review
         await updateTicketStatus(ticket, 'In Review');
-        logger.info('Created PR and moved ticket to In Review', { ticketId: ticket.identifier, prUrl });
+        logger.info('Created PR and moved ticket to In Review', {
+          ticketId: ticket.identifier,
+          prUrl,
+        });
 
         // Record completion for dashboard
         recordCompletion(ticket.identifier, tenant.name, duration, prUrl);
@@ -258,8 +316,19 @@ class Spawner {
       updateMemory(tenant.repoPath, {
         learnings: [`Completed ${ticket.identifier}: ${ticket.title}`],
       });
+
+      // Notify other agents via coordination system
+      if (coordCtx) {
+        await coordination.notifyCompletion(
+          coordCtx,
+          `PR created: ${prUrl ?? 'No changes needed'}`
+        );
+      }
     } catch (error) {
-      logger.error('Error in post-success handling', { ticketId: ticket.identifier, error: String(error) });
+      logger.error('Error in post-success handling', {
+        ticketId: ticket.identifier,
+        error: String(error),
+      });
       await updateTicketStatus(ticket, 'Done');
     }
   }
@@ -269,9 +338,14 @@ class Spawner {
     tenant: TenantConfig,
     item: QueuedTicket,
     branchName: string,
-    errorMessage: string
+    errorMessage: string,
+    coordCtx?: AgentContext
   ): Promise<void> {
-    logger.error('Agent failed', { ticketId: ticket.identifier, error: errorMessage, tenant: tenant.name });
+    logger.error('Agent failed', {
+      ticketId: ticket.identifier,
+      error: errorMessage,
+      tenant: tenant.name,
+    });
 
     try {
       // Clean up any partial branch
@@ -285,14 +359,9 @@ class Spawner {
       }
 
       // Notify: agent failed
-      await notify(createAgentFailedEvent(
-        ticket,
-        tenant,
-        branchName,
-        errorMessage,
-        item.attempts + 1,
-        3
-      ));
+      await notify(
+        createAgentFailedEvent(ticket, tenant, branchName, errorMessage, item.attempts + 1, 3)
+      );
 
       // Add comment with error
       await addComment(
@@ -308,10 +377,18 @@ class Spawner {
         errors: [errorMessage],
       });
 
+      // Notify other agents via coordination system
+      if (coordCtx) {
+        await coordination.notifyFailure(coordCtx, errorMessage);
+      }
+
       // Requeue for retry
       ticketQueue.requeue(item);
     } catch (error) {
-      logger.error('Error in failure handling', { ticketId: ticket.identifier, error: String(error) });
+      logger.error('Error in failure handling', {
+        ticketId: ticket.identifier,
+        error: String(error),
+      });
     }
   }
 
@@ -342,7 +419,9 @@ class Spawner {
       // Build validation section if available
       let validationSection = '';
       if (validation) {
-        const checks = validation.results.map(r => `- ${r.passed ? '✅' : '❌'} ${r.name}`).join('\n');
+        const checks = validation.results
+          .map((r) => `- ${r.passed ? '✅' : '❌'} ${r.name}`)
+          .join('\n');
         validationSection = `\n\n### Validation\n${checks}`;
       }
 
@@ -367,7 +446,11 @@ Linear: ${ticket.identifier}
       logger.info('Created PR', { prUrl: prResult, branchName, ticketId: ticket.identifier });
       return prResult;
     } catch (error) {
-      logger.error('Failed to create PR', { branchName, ticketId: ticket.identifier, error: String(error) });
+      logger.error('Failed to create PR', {
+        branchName,
+        ticketId: ticket.identifier,
+        error: String(error),
+      });
       return null;
     }
   }
