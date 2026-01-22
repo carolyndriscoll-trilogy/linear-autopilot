@@ -203,11 +203,11 @@ export class PollingWatcher {
     // Fetch issues with agent-ready label (uses shared graphql with rate limiting & retries)
     const data = await graphql<PollResponse>(
       `
-        query GetAgentReadyIssues($teamId: String!) {
+        query GetAgentReadyIssues($teamId: String!, $labelName: String!) {
           team(id: $teamId) {
             issues(
               filter: {
-                labels: { name: { eq: "agent-ready" } }
+                labels: { name: { eq: $labelName } }
                 state: { name: { in: ["Todo", "Backlog"] } }
               }
               first: 10
@@ -230,7 +230,7 @@ export class PollingWatcher {
           }
         }
       `,
-      { teamId },
+      { teamId, labelName: AGENT_READY_LABEL },
       'GetAgentReadyIssues'
     );
 
