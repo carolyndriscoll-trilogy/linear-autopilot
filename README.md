@@ -177,24 +177,105 @@ Each tenant in `tenants.json` supports:
 | `githubRepo`          | GitHub repo in `org/repo` format    |
 | `notifications`       | Array of notification configs       |
 
-### Notification Providers
+### Notifications
+
+Notifications keep your team informed about agent activity. Configure them in the `notifications` array for each tenant in `tenants.json`.
+
+#### When You Get Notified
+
+- **Agent Started** — When an agent begins working on a ticket
+- **Agent Completed** — When implementation succeeds and a PR is created
+- **Agent Failed** — When an agent encounters an error (includes error details)
+- **PR Created** — When a pull request is opened (includes PR link)
+- **Agent Stuck** — When an agent hasn't made progress for too long
+
+#### Available Providers
+
+| Provider          | Type       | Required Config                         |
+| ----------------- | ---------- | --------------------------------------- |
+| Slack             | `slack`    | `webhookUrl`                            |
+| Discord           | `discord`  | `webhookUrl`                            |
+| Google Chat       | `gchat`    | `webhookUrl`                            |
+| Email (Resend)    | `email`    | `provider: "resend"`, `apiKey`, `to`    |
+| Email (SendGrid)  | `email`    | `provider: "sendgrid"`, `apiKey`, `to`  |
+| SMS (Twilio)      | `sms`      | `accountSid`, `authToken`, `from`, `to` |
+| WhatsApp (Twilio) | `whatsapp` | `accountSid`, `authToken`, `from`, `to` |
+
+#### Configuration Examples
 
 ```json
-// Slack
-{ "type": "slack", "config": { "webhookUrl": "https://hooks.slack.com/..." } }
+{
+  "notifications": [
+    // Slack
+    {
+      "type": "slack",
+      "config": {
+        "webhookUrl": "https://hooks.slack.com/services/T00/B00/XXX"
+      }
+    },
 
-// Discord
-{ "type": "discord", "config": { "webhookUrl": "https://discord.com/api/webhooks/..." } }
+    // Discord
+    {
+      "type": "discord",
+      "config": {
+        "webhookUrl": "https://discord.com/api/webhooks/123/abc"
+      }
+    },
 
-// Email (Resend)
-{ "type": "email", "config": { "provider": "resend", "apiKey": "re_xxx", "to": "team@example.com" } }
+    // Google Chat
+    {
+      "type": "gchat",
+      "config": {
+        "webhookUrl": "https://chat.googleapis.com/v1/spaces/XXX/messages?key=YYY"
+      }
+    },
 
-// SMS (Twilio)
-{ "type": "sms", "config": { "accountSid": "AC...", "authToken": "...", "from": "+1...", "to": "+1..." } }
+    // Email via Resend
+    {
+      "type": "email",
+      "config": {
+        "provider": "resend",
+        "apiKey": "re_xxxxx",
+        "to": "team@example.com"
+      }
+    },
 
-// Google Chat
-{ "type": "gchat", "config": { "webhookUrl": "https://chat.googleapis.com/..." } }
+    // Email via SendGrid
+    {
+      "type": "email",
+      "config": {
+        "provider": "sendgrid",
+        "apiKey": "SG.xxxxx",
+        "to": "team@example.com"
+      }
+    },
+
+    // SMS via Twilio
+    {
+      "type": "sms",
+      "config": {
+        "accountSid": "ACxxxxx",
+        "authToken": "xxxxx",
+        "from": "+15551234567",
+        "to": "+15559876543"
+      }
+    },
+
+    // WhatsApp via Twilio
+    {
+      "type": "whatsapp",
+      "config": {
+        "accountSid": "ACxxxxx",
+        "authToken": "xxxxx",
+        "from": "+15551234567",
+        "to": "+15559876543"
+      }
+    }
+  ]
+}
 ```
+
+You can configure multiple providers to receive notifications on several channels simultaneously.
 
 ## API Endpoints
 
