@@ -4,12 +4,36 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 
+const isTestMode = process.argv.includes('--test');
+
+const testValues = {
+  linearApiKey: 'lin_api_test123',
+  githubToken: 'ghp_test456',
+  pollingInterval: '30000',
+  port: '3000',
+  teamName: 'test-team',
+  linearTeamId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  repoPath: '/tmp/test-repo',
+  maxAgents: '2',
+  githubRepo: 'test-org/test-repo',
+  wantNotifications: false,
+};
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-function ask(question: string, defaultValue?: string): Promise<string> {
+function ask(
+  question: string,
+  defaultValue?: string,
+  testKey?: keyof typeof testValues
+): Promise<string> {
+  if (isTestMode && testKey) {
+    const value = testValues[testKey] as string;
+    console.log(`${question}: ${value} (test mode)`);
+    return Promise.resolve(value);
+  }
   const prompt = defaultValue ? `${question} [${defaultValue}]: ` : `${question}: `;
   return new Promise((resolve) => {
     rl.question(prompt, (answer) => {
@@ -18,7 +42,16 @@ function ask(question: string, defaultValue?: string): Promise<string> {
   });
 }
 
-function askYesNo(question: string, defaultYes = true): Promise<boolean> {
+function askYesNo(
+  question: string,
+  defaultYes = true,
+  testKey?: keyof typeof testValues
+): Promise<boolean> {
+  if (isTestMode && testKey) {
+    const value = testValues[testKey] as boolean;
+    console.log(`${question}: ${value ? 'yes' : 'no'} (test mode)`);
+    return Promise.resolve(value);
+  }
   const hint = defaultYes ? '[Y/n]' : '[y/N]';
   return new Promise((resolve) => {
     rl.question(`${question} ${hint}: `, (answer) => {
@@ -36,7 +69,7 @@ async function setupEnv(): Promise<void> {
   const envPath = path.join(process.cwd(), '.env');
   const examplePath = path.join(process.cwd(), '.env.example');
 
-  if (fs.existsSync(envPath)) {
+  if (fs.existsSync(envPath) && !isTestMode) {
     const overwrite = await askYesNo('.env already exists. Overwrite?', false);
     if (!overwrite) {
       console.log('Skipping .env setup.\n');
@@ -47,10 +80,18 @@ async function setupEnv(): Promise<void> {
   console.log('\n📋 Setting up .env file...\n');
   console.log('Get your Linear API key from: https://linear.app/settings/api\n');
 
-  const linearApiKey = await ask('Linear API key');
-  const githubToken = await ask('GitHub token (optional, for PR creation)');
-  const pollingInterval = await ask('Polling interval in ms (0 for webhooks only)', '30000');
-  const port = await ask('Server port', '3000');
+  const linearApiKey = await ask('Linear API key', undefined, 'linearApiKey');
+  const githubToken = await ask(
+    'GitHub token (optional, for PR creation)',
+    undefined,
+    'githubToken'
+  );
+  const pollingInterval = await ask(
+    'Polling interval in ms (0 for webhooks only)',
+    '30000',
+    'pollingInterval'
+  );
+  const port = await ask('Server port', '3000', 'port');
 
   let envContent = fs.readFileSync(examplePath, 'utf-8');
   envContent = envContent.replace('LINEAR_API_KEY=lin_api_xxxxx', `LINEAR_API_KEY=${linearApiKey}`);
@@ -68,7 +109,7 @@ async function setupEnv(): Promise<void> {
 async function setupTenants(): Promise<void> {
   const tenantsPath = path.join(process.cwd(), 'tenants.json');
 
-  if (fs.existsSync(tenantsPath)) {
+  if (fs.existsSync(tenantsPath) && !isTestMode) {
     const overwrite = await askYesNo('tenants.json already exists. Overwrite?', false);
     if (!overwrite) {
       console.log('Skipping tenants.json setup.\n');
@@ -83,13 +124,17 @@ async function setupTenants(): Promise<void> {
   console.log('  3. The TEAM_ID is a UUID like "a1b2c3d4-e5f6-..."');
   console.log('  Or use the Linear API: https://studio.apollographql.com/public/Linear-API/\n');
 
-  const name = await ask('Team name (for display)', 'my-team');
-  const linearTeamId = await ask('Linear team ID (UUID)');
-  const repoPath = await ask('Absolute path to repository');
-  const maxAgents = await ask('Max concurrent agents', '2');
-  const githubRepo = await ask('GitHub repo (org/repo format)');
+  const name = await ask('Team name (for display)', 'my-team', 'teamName');
+  const linearTeamId = await ask('Linear team ID (UUID)', undefined, 'linearTeamId');
+  const repoPath = await ask('Absolute path to repository', undefined, 'repoPath');
+  const maxAgents = await ask('Max concurrent agents', '2', 'maxAgents');
+  const githubRepo = await ask('GitHub repo (org/repo format)', undefined, 'githubRepo');
 
-  const wantNotifications = await askYesNo('\nSet up Slack notifications?', false);
+  const wantNotifications = await askYesNo(
+    '\nSet up Slack notifications?',
+    false,
+    'wantNotifications'
+  );
   const notifications: Array<{ type: string; config: Record<string, string> }> = [];
 
   if (wantNotifications) {
@@ -149,6 +194,10 @@ async function main(): Promise<void> {
   console.log('═══════════════════════════════════════════');
   console.log('       Linear Autopilot Setup Wizard       ');
   console.log('═══════════════════════════════════════════\n');
+
+  if (isTestMode) {
+    console.log('🧪 Running in TEST MODE with dummy values\n');
+  }
 
   await checkPrerequisites();
   await setupEnv();
