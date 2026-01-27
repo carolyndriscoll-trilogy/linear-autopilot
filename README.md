@@ -9,6 +9,7 @@ Linear Autopilot watches your Linear board for tickets labeled `agent-ready`, sp
 ## Features
 
 - **Autonomous Implementation** — Claude Code agents work on tickets end-to-end: read requirements, write code, run tests, commit changes
+- **Cross-Session Learning** — Agents remember codebase patterns, common errors, and which files to modify for similar tickets
 - **Multi-Tenant Support** — Manage multiple teams and repositories from a single instance
 - **Validation Pipeline** — Automatically runs tests, linting, type checking, and coverage checks before creating PRs
 - **Smart Retries** — Failed tickets are requeued with exponential backoff (up to 3 attempts)
