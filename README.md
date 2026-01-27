@@ -59,7 +59,20 @@ cd linear-autopilot
 npm install
 ```
 
-### Configuration
+### Quick Setup (Recommended)
+
+Run the interactive setup wizard:
+
+```bash
+npm run setup
+```
+
+This will guide you through creating your `.env` and `tenants.json` files.
+
+### Manual Configuration
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
 
 1. **Create environment file:**
 
@@ -78,12 +91,18 @@ LINEAR_POLLING_INTERVAL_MS=30000           # Use polling instead of webhooks
 
 3. **Create `tenants.json`:**
 
+```bash
+cp tenants.example.json tenants.json
+```
+
+Edit `tenants.json` with your team details:
+
 ```json
 {
   "tenants": [
     {
       "name": "my-team",
-      "linearTeamId": "your-linear-team-id",
+      "linearTeamId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "repoPath": "/path/to/your/repo",
       "maxConcurrentAgents": 2,
       "githubRepo": "org/repo-name",
@@ -99,6 +118,22 @@ LINEAR_POLLING_INTERVAL_MS=30000           # Use polling instead of webhooks
   ]
 }
 ```
+
+</details>
+
+### Finding Your Linear Team ID
+
+Your Linear team ID is a UUID that you can find in two ways:
+
+1. **From the URL:** Go to Linear, click on your team, and look at the URL:
+
+   ```
+   https://linear.app/your-workspace/team/TEAM_ID/active
+   ```
+
+   The `TEAM_ID` is the UUID (e.g., `a1b2c3d4-e5f6-7890-abcd-ef1234567890`)
+
+2. **From Linear Settings:** Go to Settings → Teams → Click your team → The ID is shown in the team settings
 
 ### Running
 
