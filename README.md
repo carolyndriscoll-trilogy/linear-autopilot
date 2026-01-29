@@ -46,284 +46,36 @@ Linear Autopilot watches your Linear board for tickets labeled `agent-ready`, sp
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 18+
 - [Claude Code CLI](https://github.com/anthropics/claude-code) installed and authenticated
 - [GitHub CLI](https://cli.github.com/) (`gh`) authenticated
 - Linear API key
 
-### Installation
+### Setup
 
 ```bash
 git clone https://github.com/carolyndriscoll-trilogy/linear-autopilot.git
 cd linear-autopilot
 npm install
-```
-
-### Quick Setup (Recommended)
-
-Run the interactive setup wizard:
-
-```bash
-npm run setup
-```
-
-This will guide you through creating your `.env` and `tenants.json` files.
-
-### Manual Configuration
-
-<details>
-<summary>Click to expand manual setup instructions</summary>
-
-1. **Create environment file:**
-
-```bash
-cp .env.example .env
-```
-
-2. **Edit `.env` with your credentials:**
-
-```env
-LINEAR_API_KEY=lin_api_xxxxx
-GITHUB_TOKEN=ghp_xxxxx
-LINEAR_WEBHOOK_SECRET=your_webhook_secret  # Optional
-LINEAR_POLLING_INTERVAL_MS=30000           # Use polling instead of webhooks
-```
-
-3. **Create `tenants.json`:**
-
-```bash
-cp tenants.example.json tenants.json
-```
-
-Edit `tenants.json` with your team details:
-
-```json
-{
-  "tenants": [
-    {
-      "name": "my-team",
-      "linearTeamId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "repoPath": "/path/to/your/repo",
-      "maxConcurrentAgents": 2,
-      "githubRepo": "org/repo-name",
-      "notifications": [
-        {
-          "type": "slack",
-          "config": {
-            "webhookUrl": "https://hooks.slack.com/services/xxx"
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-</details>
-
-### Finding Your Linear Team ID
-
-Your Linear team ID is a UUID that you can find in two ways:
-
-1. **From the URL:** Go to Linear, click on your team, and look at the URL:
-
-   ```
-   https://linear.app/your-workspace/team/TEAM_ID/active
-   ```
-
-   The `TEAM_ID` is the UUID (e.g., `a1b2c3d4-e5f6-7890-abcd-ef1234567890`)
-
-2. **From Linear Settings:** Go to Settings → Teams → Click your team → The ID is shown in the team settings
-
-### Running
-
-```bash
-# Development
-npm run dev
-
-# Production
-npm run build
-npm start
+npm run setup   # Interactive setup wizard
+npm run dev     # Start in development mode
 ```
 
 Open http://localhost:3000/dashboard to view the dashboard.
 
-## Configuration
+For detailed setup instructions, see the [Getting Started Guide](docs/getting-started.md).
 
-### Environment Variables
+## Documentation
 
-| Variable                     | Description                          | Default  |
-| ---------------------------- | ------------------------------------ | -------- |
-| `LINEAR_API_KEY`             | Linear API key (required)            | -        |
-| `LINEAR_WEBHOOK_SECRET`      | Webhook signature secret             | -        |
-| `LINEAR_POLLING_INTERVAL_MS` | Polling interval (0 = webhooks only) | `0`      |
-| `GITHUB_TOKEN`               | GitHub token for PR creation         | -        |
-| `PORT`                       | Server port                          | `3000`   |
-| `LOG_LEVEL`                  | Log level (debug/info/warn/error)    | `info`   |
-| `LOG_FILE`                   | Optional log file path               | -        |
-| `COVERAGE_THRESHOLD`         | Minimum coverage % required          | `0`      |
-| `AGENT_STUCK_THRESHOLD_MS`   | Stuck detection threshold            | `600000` |
-
-### Tenant Configuration
-
-Each tenant in `tenants.json` supports:
-
-| Field                 | Description                         |
-| --------------------- | ----------------------------------- |
-| `name`                | Display name for the tenant         |
-| `linearTeamId`        | Linear team ID                      |
-| `repoPath`            | Absolute path to the repository     |
-| `maxConcurrentAgents` | Max parallel agents for this tenant |
-| `githubRepo`          | GitHub repo in `org/repo` format    |
-| `notifications`       | Array of notification configs       |
-
-### Notifications
-
-Notifications keep your team informed about agent activity. Configure them in the `notifications` array for each tenant in `tenants.json`.
-
-#### When You Get Notified
-
-- **Agent Started** — When an agent begins working on a ticket
-- **Agent Completed** — When implementation succeeds and a PR is created
-- **Agent Failed** — When an agent encounters an error (includes error details)
-- **PR Created** — When a pull request is opened (includes PR link)
-- **Agent Stuck** — When an agent hasn't made progress for too long
-
-#### Available Providers
-
-| Provider          | Type       | Required Config                         |
-| ----------------- | ---------- | --------------------------------------- |
-| Slack             | `slack`    | `webhookUrl`                            |
-| Discord           | `discord`  | `webhookUrl`                            |
-| Google Chat       | `gchat`    | `webhookUrl`                            |
-| Email (Resend)    | `email`    | `provider: "resend"`, `apiKey`, `to`    |
-| Email (SendGrid)  | `email`    | `provider: "sendgrid"`, `apiKey`, `to`  |
-| SMS (Twilio)      | `sms`      | `accountSid`, `authToken`, `from`, `to` |
-| WhatsApp (Twilio) | `whatsapp` | `accountSid`, `authToken`, `from`, `to` |
-
-#### Configuration Examples
-
-```json
-{
-  "notifications": [
-    // Slack
-    {
-      "type": "slack",
-      "config": {
-        "webhookUrl": "https://hooks.slack.com/services/T00/B00/XXX"
-      }
-    },
-
-    // Discord
-    {
-      "type": "discord",
-      "config": {
-        "webhookUrl": "https://discord.com/api/webhooks/123/abc"
-      }
-    },
-
-    // Google Chat
-    {
-      "type": "gchat",
-      "config": {
-        "webhookUrl": "https://chat.googleapis.com/v1/spaces/XXX/messages?key=YYY"
-      }
-    },
-
-    // Email via Resend
-    {
-      "type": "email",
-      "config": {
-        "provider": "resend",
-        "apiKey": "re_xxxxx",
-        "to": "team@example.com"
-      }
-    },
-
-    // Email via SendGrid
-    {
-      "type": "email",
-      "config": {
-        "provider": "sendgrid",
-        "apiKey": "SG.xxxxx",
-        "to": "team@example.com"
-      }
-    },
-
-    // SMS via Twilio
-    {
-      "type": "sms",
-      "config": {
-        "accountSid": "ACxxxxx",
-        "authToken": "xxxxx",
-        "from": "+15551234567",
-        "to": "+15559876543"
-      }
-    },
-
-    // WhatsApp via Twilio
-    {
-      "type": "whatsapp",
-      "config": {
-        "accountSid": "ACxxxxx",
-        "authToken": "xxxxx",
-        "from": "+15551234567",
-        "to": "+15559876543"
-      }
-    }
-  ]
-}
-```
-
-You can configure multiple providers to receive notifications on several channels simultaneously.
-
-## API Endpoints
-
-| Endpoint                    | Description              |
-| --------------------------- | ------------------------ |
-| `GET /health`               | Health check with status |
-| `GET /dashboard`            | Web dashboard            |
-| `GET /dashboard/api/status` | JSON status overview     |
-| `GET /dashboard/api/agents` | Active agent details     |
-| `GET /dashboard/api/costs`  | Cost records             |
-| `GET /dashboard/api/queue`  | Queued tickets           |
-| `POST /webhook/linear`      | Linear webhook endpoint  |
-
-## Development
-
-### Running Tests
-
-```bash
-npm test                    # Run all tests
-npm run test:watch          # Watch mode
-npm run test:coverage       # With coverage report
-```
-
-### Code Quality
-
-```bash
-npm run lint                # Run ESLint
-npm run typecheck           # TypeScript type checking
-npm run format              # Format with Prettier
-```
-
-Coverage threshold is set to **70%** for statements, branches, functions, and lines.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
-
-## Deployment
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on deploying to:
-
-- Docker (local)
-- Railway
-- Fly.io
-
-### Quick Docker Start
-
-```bash
-docker-compose up -d
-```
+| Document                                   | Description                            |
+| ------------------------------------------ | -------------------------------------- |
+| [Getting Started](docs/getting-started.md) | Installation and first-time setup      |
+| [Configuration](docs/configuration.md)     | All configuration options              |
+| [Architecture](docs/architecture.md)       | System design and component overview   |
+| [Features](docs/features.md)               | How each feature is implemented        |
+| [Deployment](docs/deployment.md)           | Docker, Railway, and Fly.io deployment |
+| [Security](SECURITY.md)                    | Security best practices                |
+| [Contributing](CONTRIBUTING.md)            | How to contribute                      |
 
 ## Project Structure
 
@@ -343,24 +95,15 @@ src/
 └── watcher/         # Webhook and polling handlers
 ```
 
-## Validation Pipeline
+## Development
 
-Before creating a PR, Autopilot runs:
-
-1. **Tests** — `npm test`
-2. **Linting** — `npm run lint` (if script exists)
-3. **Type Check** — `npx tsc --noEmit` (if tsconfig.json exists)
-4. **Coverage** — Checks against `COVERAGE_THRESHOLD` (if set)
-
-If any step fails, the ticket is moved back to Backlog with an error comment.
-
-## Cost Tracking
-
-Autopilot tracks token usage from Claude Code output and estimates costs:
-
-- Stored in `.linear-autopilot/costs.json` per repository
-- Visible in the dashboard
-- Available via `/dashboard/api/costs`
+```bash
+npm run dev           # Start development server
+npm test              # Run tests
+npm run lint          # Run linter
+npm run typecheck     # Type check
+npm run setup -- --test  # Test the setup wizard
+```
 
 ## License
 

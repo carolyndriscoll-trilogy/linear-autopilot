@@ -117,6 +117,7 @@ Railway provides easy Docker deployments with persistent volumes.
 5. **Create tenants.json** as a Railway config file or mount it
 
 6. **Deploy**:
+
    ```bash
    railway up
    ```
@@ -148,16 +149,19 @@ Create a `railway.json` if you need custom settings:
 Fly.io provides global edge deployment with persistent volumes.
 
 1. **Install Fly CLI**:
+
    ```bash
    curl -L https://fly.io/install.sh | sh
    ```
 
 2. **Login**:
+
    ```bash
    fly auth login
    ```
 
 3. **Create fly.toml**:
+
    ```toml
    app = "linear-autopilot"
    primary_region = "sjc"
@@ -207,16 +211,19 @@ Fly.io provides global edge deployment with persistent volumes.
    ```
 
 4. **Create the app**:
+
    ```bash
    fly apps create linear-autopilot
    ```
 
 5. **Create a volume**:
+
    ```bash
    fly volumes create autopilot_data --size 1 --region sjc
    ```
 
 6. **Set secrets**:
+
    ```bash
    fly secrets set LINEAR_API_KEY=lin_api_xxx
    fly secrets set GITHUB_TOKEN=ghp_xxx
@@ -224,6 +231,7 @@ Fly.io provides global edge deployment with persistent volumes.
    ```
 
 7. **Deploy**:
+
    ```bash
    fly deploy
    ```
@@ -237,6 +245,7 @@ Fly.io provides global edge deployment with persistent volumes.
 ### Accessing the Dashboard
 
 After deployment, access the dashboard at:
+
 - Railway: `https://your-app.railway.app/dashboard`
 - Fly.io: `https://linear-autopilot.fly.dev/dashboard`
 
@@ -245,15 +254,18 @@ After deployment, access the dashboard at:
 Linear Autopilot supports two modes for detecting new tickets:
 
 ### Webhook Mode (Recommended)
+
 - Real-time ticket detection
 - Lower API usage
 - Requires public URL
 
 Set `LINEAR_POLLING_INTERVAL_MS=0` and configure a webhook in Linear:
+
 - URL: `https://your-domain/webhook/linear`
 - Events: Issue updates
 
 ### Polling Mode
+
 - Works without public URL
 - Higher API usage
 - Configurable interval
@@ -279,21 +291,25 @@ Configure your monitoring service to check this endpoint.
 ## Troubleshooting
 
 ### Agent Not Starting
+
 - Check Claude Code CLI is installed and authenticated
 - Verify `LINEAR_API_KEY` is valid
 - Check repository paths in `tenants.json`
 
 ### PR Creation Failing
+
 - Verify `GITHUB_TOKEN` has repo permissions
 - Check `gh` CLI is authenticated
 - Ensure `githubRepo` in tenants.json matches the format `org/repo`
 
 ### Webhook Not Receiving Events
+
 - Verify `LINEAR_WEBHOOK_SECRET` matches the Linear webhook config
 - Check the webhook URL is publicly accessible
 - Review Linear webhook delivery logs
 
 ### Logs
+
 - Local: Check console output
 - Docker: `docker-compose logs -f`
 - Railway: View in dashboard or `railway logs`

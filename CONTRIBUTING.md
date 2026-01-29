@@ -112,6 +112,8 @@ Please be respectful and constructive in all interactions. We're building someth
 
 ## Project Structure
 
+See [Architecture Documentation](docs/architecture.md) for detailed system design.
+
 ```
 src/
 ├── config/          # Environment and tenant configuration
