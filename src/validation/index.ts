@@ -1,4 +1,4 @@
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../logger';
@@ -36,48 +36,75 @@ function hasTsConfig(repoPath: string): boolean {
   return existsSync(join(repoPath, 'tsconfig.json'));
 }
 
-function runCommand(
+async function runCommand(
   command: string,
   args: string[],
   repoPath: string,
   name: string
-): ValidationResult {
+): Promise<ValidationResult> {
   const startTime = Date.now();
 
   logger.debug('Running validation step', { name, command, args });
 
-  try {
-    const result = spawnSync(command, args, {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
       cwd: repoPath,
-      encoding: 'utf-8',
-      timeout: VALIDATION_TIMEOUT_MS,
       env: { ...process.env, CI: 'true' },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const duration = Date.now() - startTime;
-    const output = (result.stdout || '') + (result.stderr || '');
-    const passed = result.status === 0;
+    let stdout = '';
+    let stderr = '';
 
-    logger.debug('Validation step completed', { name, passed, duration });
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
 
-    return {
-      name,
-      passed,
-      output: output.slice(-5000), // Keep last 5000 chars
-      duration,
-    };
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    return {
-      name,
-      passed: false,
-      output: error instanceof Error ? error.message : String(error),
-      duration,
-    };
-  }
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    const timer = setTimeout(() => {
+      child.kill();
+      const duration = Date.now() - startTime;
+      resolve({
+        name,
+        passed: false,
+        output: `Timed out after ${VALIDATION_TIMEOUT_MS}ms`,
+        duration,
+      });
+    }, VALIDATION_TIMEOUT_MS);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const duration = Date.now() - startTime;
+      const output = (stdout + stderr).slice(-5000); // Keep last 5000 chars
+      const passed = code === 0;
+
+      logger.debug('Validation step completed', { name, passed, duration });
+
+      resolve({
+        name,
+        passed,
+        output,
+        duration,
+      });
+    });
+
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      const duration = Date.now() - startTime;
+      resolve({
+        name,
+        passed: false,
+        output: error.message,
+        duration,
+      });
+    });
+  });
 }
 
-function runTests(repoPath: string): ValidationResult {
+async function runTests(repoPath: string): Promise<ValidationResult> {
   if (!hasScript(repoPath, 'test')) {
     return {
       name: 'tests',
@@ -90,7 +117,7 @@ function runTests(repoPath: string): ValidationResult {
   return runCommand('npm', ['test'], repoPath, 'tests');
 }
 
-function runLint(repoPath: string): ValidationResult {
+async function runLint(repoPath: string): Promise<ValidationResult> {
   if (!hasScript(repoPath, 'lint')) {
     return {
       name: 'lint',
@@ -103,7 +130,7 @@ function runLint(repoPath: string): ValidationResult {
   return runCommand('npm', ['run', 'lint'], repoPath, 'lint');
 }
 
-function runTypeCheck(repoPath: string): ValidationResult {
+async function runTypeCheck(repoPath: string): Promise<ValidationResult> {
   if (!hasTsConfig(repoPath)) {
     return {
       name: 'typecheck',
@@ -171,13 +198,13 @@ export async function validate(repoPath: string): Promise<ValidationSummary> {
   const results: ValidationResult[] = [];
 
   // Run validations in order
-  results.push(runTests(repoPath));
+  results.push(await runTests(repoPath));
   if (!results[results.length - 1].passed) {
     logger.warn('Tests failed, stopping validation', { repoPath });
   }
 
-  results.push(runLint(repoPath));
-  results.push(runTypeCheck(repoPath));
+  results.push(await runLint(repoPath));
+  results.push(await runTypeCheck(repoPath));
   results.push(checkCoverage(repoPath));
 
   const totalDuration = Date.now() - startTime;

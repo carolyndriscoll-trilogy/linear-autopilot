@@ -20,10 +20,10 @@ interface CostFile {
 const TRACKING_DIR = '.linear-autopilot';
 const COSTS_FILE = 'costs.json';
 
-// Pricing per 1M tokens (Claude 3.5 Sonnet pricing as of 2024)
+// Pricing per 1M tokens (configurable via environment variables)
 const PRICING = {
-  input: 3.00, // $3 per 1M input tokens
-  output: 15.00, // $15 per 1M output tokens
+  input: parseFloat(process.env.COST_PER_M_INPUT_TOKENS || '3.00'),
+  output: parseFloat(process.env.COST_PER_M_OUTPUT_TOKENS || '15.00'),
 };
 
 function getCostsPath(repoPath: string): string {

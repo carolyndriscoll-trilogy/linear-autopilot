@@ -146,7 +146,7 @@ export async function updateTicketStatus(ticket: LinearTicket, stateName: string
         }
       }
     `,
-    { id: ticket.identifier, stateId },
+    { id: ticket.id, stateId },
     'UpdateIssue'
   );
 
