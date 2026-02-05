@@ -165,6 +165,161 @@ describe('Tenants Config', () => {
     });
   });
 
+  describe('tenant validation', () => {
+    it('should exclude tenants with missing name', () => {
+      const mockTenants = {
+        tenants: [
+          { linearTeamId: 'team-1', repoPath: '/', maxConcurrentAgents: 1, githubRepo: 'o/r' },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+
+    it('should exclude tenants with missing linearTeamId', () => {
+      const mockTenants = {
+        tenants: [{ name: 'test', repoPath: '/', maxConcurrentAgents: 1, githubRepo: 'o/r' }],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+
+    it('should exclude tenants with invalid maxConcurrentAgents', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'test',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 0,
+            githubRepo: 'o/r',
+          },
+          {
+            name: 'test2',
+            linearTeamId: 'team-2',
+            repoPath: '/',
+            maxConcurrentAgents: -1,
+            githubRepo: 'o/r',
+          },
+          {
+            name: 'test3',
+            linearTeamId: 'team-3',
+            repoPath: '/',
+            maxConcurrentAgents: 1.5,
+            githubRepo: 'o/r',
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+
+    it('should exclude tenants with invalid githubRepo format', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'test',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'noslash',
+          },
+          {
+            name: 'test2',
+            linearTeamId: 'team-2',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'a/b/c',
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+
+    it('should keep valid tenants and exclude invalid ones', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'valid',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 2,
+            githubRepo: 'org/repo',
+          },
+          { name: 'invalid' }, // missing fields
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      const tenants = getAllTenants();
+
+      expect(tenants).toHaveLength(1);
+      expect(tenants[0].name).toBe('valid');
+    });
+
+    it('should accept tenants with valid notifications', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'with-notifs',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            notifications: [{ type: 'slack', config: { webhookUrl: 'https://example.com' } }],
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(1);
+    });
+
+    it('should exclude tenants with invalid notification type', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'bad-notif',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            notifications: [{ type: 'carrier-pigeon', config: {} }],
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+  });
+
   describe('reloadTenants', () => {
     it('should clear cache and reload tenants', () => {
       const mockTenants1 = {
