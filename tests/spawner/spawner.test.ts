@@ -42,16 +42,13 @@ jest.mock('../../src/memory', () => ({
   updateMemory: mockUpdateMemory,
 }));
 
-const mockValidate =
-  jest.fn<
-    (
-      ...args: unknown[]
-    ) => Promise<{
-      passed: boolean;
-      results: Array<{ name: string; passed: boolean; output: string }>;
-      totalDuration: number;
-    }>
-  >();
+const mockValidate = jest.fn<
+  (...args: unknown[]) => Promise<{
+    passed: boolean;
+    results: Array<{ name: string; passed: boolean; output: string }>;
+    totalDuration: number;
+  }>
+>();
 const mockFormatValidationSummary = jest.fn().mockReturnValue('Validation summary');
 jest.mock('../../src/validation', () => ({
   validate: mockValidate,
@@ -214,7 +211,7 @@ describe('Spawner', () => {
       expect(mockNotify).toHaveBeenCalled();
 
       // Verify validation was run
-      expect(mockValidate).toHaveBeenCalledWith(tenant.repoPath);
+      expect(mockValidate).toHaveBeenCalledWith(tenant.repoPath, undefined);
 
       // Verify PR was created
       expect(mockExecFileSync).toHaveBeenCalledWith(

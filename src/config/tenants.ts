@@ -9,6 +9,17 @@ export interface NotificationConfig {
   config: Record<string, string>;
 }
 
+export interface ValidationStep {
+  name: string;
+  command: string;
+  args: string[];
+}
+
+export interface ValidationConfig {
+  steps: ValidationStep[];
+  timeoutMs?: number;
+}
+
 export interface TenantConfig {
   name: string;
   linearTeamId: string;
@@ -16,6 +27,7 @@ export interface TenantConfig {
   maxConcurrentAgents: number;
   githubRepo: string;
   triggerLabel?: string;
+  validation?: ValidationConfig;
   notifications?: NotificationConfig[];
 }
 
@@ -70,6 +82,33 @@ function validateTenant(tenant: unknown, index: number): TenantConfig | null {
   if (t.triggerLabel !== undefined) {
     if (typeof t.triggerLabel !== 'string' || !t.triggerLabel.trim()) {
       errors.push('triggerLabel must be a non-empty string if provided');
+    }
+  }
+
+  if (t.validation !== undefined) {
+    if (typeof t.validation !== 'object' || t.validation === null) {
+      errors.push('validation must be an object');
+    } else {
+      const v = t.validation as Record<string, unknown>;
+      if (!Array.isArray(v.steps)) {
+        errors.push('validation.steps must be an array');
+      } else {
+        for (let i = 0; i < v.steps.length; i++) {
+          const step = v.steps[i] as Record<string, unknown>;
+          if (typeof step.name !== 'string' || !step.name) {
+            errors.push(`validation.steps[${i}].name must be a non-empty string`);
+          }
+          if (typeof step.command !== 'string' || !step.command) {
+            errors.push(`validation.steps[${i}].command must be a non-empty string`);
+          }
+          if (!Array.isArray(step.args)) {
+            errors.push(`validation.steps[${i}].args must be an array`);
+          }
+        }
+      }
+      if (v.timeoutMs !== undefined && (typeof v.timeoutMs !== 'number' || v.timeoutMs <= 0)) {
+        errors.push('validation.timeoutMs must be a positive number');
+      }
     }
   }
 

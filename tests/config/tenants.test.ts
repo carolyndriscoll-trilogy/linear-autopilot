@@ -350,6 +350,79 @@ describe('Tenants Config', () => {
       expect(getAllTenants()).toHaveLength(0);
     });
 
+    it('should accept tenants with valid validation config', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'with-validation',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            validation: {
+              steps: [
+                { name: 'tests', command: 'npm', args: ['test'] },
+                { name: 'e2e', command: 'npm', args: ['run', 'e2e'] },
+              ],
+              timeoutMs: 600000,
+            },
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      const tenants = getAllTenants();
+      expect(tenants).toHaveLength(1);
+      expect(tenants[0].validation?.steps).toHaveLength(2);
+    });
+
+    it('should exclude tenants with invalid validation steps', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'bad-steps',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            validation: {
+              steps: [{ name: '', command: 'npm', args: ['test'] }],
+            },
+          },
+          {
+            name: 'missing-command',
+            linearTeamId: 'team-2',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            validation: {
+              steps: [{ name: 'test', args: ['test'] }],
+            },
+          },
+          {
+            name: 'bad-timeout',
+            linearTeamId: 'team-3',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            validation: {
+              steps: [{ name: 'test', command: 'npm', args: ['test'] }],
+              timeoutMs: -1,
+            },
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+
     it('should exclude tenants with invalid notification type', () => {
       const mockTenants = {
         tenants: [

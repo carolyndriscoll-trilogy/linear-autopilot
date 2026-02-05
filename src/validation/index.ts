@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../logger';
 import { VALIDATION_TIMEOUT_MS } from '../constants';
+import { ValidationConfig } from '../config/tenants';
 
 export interface ValidationResult {
   name: string;
@@ -40,7 +41,8 @@ async function runCommand(
   command: string,
   args: string[],
   repoPath: string,
-  name: string
+  name: string,
+  timeoutMs: number = VALIDATION_TIMEOUT_MS
 ): Promise<ValidationResult> {
   const startTime = Date.now();
 
@@ -70,10 +72,10 @@ async function runCommand(
       resolve({
         name,
         passed: false,
-        output: `Timed out after ${VALIDATION_TIMEOUT_MS}ms`,
+        output: `Timed out after ${timeoutMs}ms`,
         duration,
       });
-    }, VALIDATION_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.on('close', (code) => {
       clearTimeout(timer);
@@ -190,22 +192,36 @@ function checkCoverage(repoPath: string): ValidationResult {
   };
 }
 
-export async function validate(repoPath: string): Promise<ValidationSummary> {
+export async function validate(
+  repoPath: string,
+  config?: ValidationConfig
+): Promise<ValidationSummary> {
   const startTime = Date.now();
 
-  logger.info('Starting validation pipeline', { repoPath });
+  logger.info('Starting validation pipeline', {
+    repoPath,
+    customSteps: config ? config.steps.length : 0,
+  });
 
   const results: ValidationResult[] = [];
+  const timeoutMs = config?.timeoutMs || VALIDATION_TIMEOUT_MS;
 
-  // Run validations in order
-  results.push(await runTests(repoPath));
-  if (!results[results.length - 1].passed) {
-    logger.warn('Tests failed, stopping validation', { repoPath });
+  if (config?.steps && config.steps.length > 0) {
+    // Run custom validation steps
+    for (const step of config.steps) {
+      results.push(await runCommand(step.command, step.args, repoPath, step.name, timeoutMs));
+    }
+  } else {
+    // Default auto-detection behavior
+    results.push(await runTests(repoPath));
+    if (!results[results.length - 1].passed) {
+      logger.warn('Tests failed, stopping validation', { repoPath });
+    }
+
+    results.push(await runLint(repoPath));
+    results.push(await runTypeCheck(repoPath));
+    results.push(checkCoverage(repoPath));
   }
-
-  results.push(await runLint(repoPath));
-  results.push(await runTypeCheck(repoPath));
-  results.push(checkCoverage(repoPath));
 
   const totalDuration = Date.now() - startTime;
   const passed = results.every((r) => r.passed);

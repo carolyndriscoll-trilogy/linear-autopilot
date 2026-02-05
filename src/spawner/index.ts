@@ -256,7 +256,7 @@ class Spawner {
 
     try {
       // Run validation before creating PR
-      const validation = await validate(tenant.repoPath);
+      const validation = await validate(tenant.repoPath, tenant.validation);
 
       if (!validation.passed) {
         logger.warn('Validation failed', {
