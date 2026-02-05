@@ -18,6 +18,7 @@ import { recordUsage } from '../tracking';
 import { recordCompletion } from '../dashboard';
 import {
   STUCK_THRESHOLD_MS,
+  AGENT_TIMEOUT_MS,
   MAX_RETRIES,
   SPAWNER_POLL_INTERVAL_MS,
   SPAWNER_HEALTH_CHECK_INTERVAL_MS,
@@ -171,13 +172,10 @@ class Spawner {
       if (result.success) {
         await this.handleSuccess(ticket, tenant, item, branchName, duration);
       } else {
-        await this.handleFailure(
-          ticket,
-          tenant,
-          item,
-          branchName,
-          'Claude Code exited with errors'
-        );
+        const reason = result.timedOut
+          ? `Claude Code timed out after ${Math.round(AGENT_TIMEOUT_MS / 60000)} minutes`
+          : 'Claude Code exited with errors';
+        await this.handleFailure(ticket, tenant, item, branchName, reason);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -190,7 +188,7 @@ class Spawner {
   private runClaudeCode(
     prompt: string,
     repoPath: string
-  ): Promise<{ success: boolean; output: string }> {
+  ): Promise<{ success: boolean; output: string; timedOut?: boolean }> {
     return new Promise((resolve) => {
       const claude = spawn('claude', ['-p', '--dangerously-skip-permissions', prompt], {
         cwd: repoPath,
@@ -199,6 +197,7 @@ class Spawner {
       });
 
       let output = '';
+      let resolved = false;
 
       claude.stdout?.on('data', (data: Buffer) => {
         const text = data.toString();
@@ -212,13 +211,32 @@ class Spawner {
         process.stderr.write(data);
       });
 
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          logger.error('Claude Code timed out', {
+            timeoutMs: AGENT_TIMEOUT_MS,
+          });
+          claude.kill();
+          resolve({ success: false, output, timedOut: true });
+        }
+      }, AGENT_TIMEOUT_MS);
+
       claude.on('close', (code) => {
-        resolve({ success: code === 0, output });
+        clearTimeout(timer);
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: code === 0, output });
+        }
       });
 
       claude.on('error', (err) => {
-        logger.error('Failed to spawn Claude Code', { error: err.message });
-        resolve({ success: false, output });
+        clearTimeout(timer);
+        if (!resolved) {
+          resolved = true;
+          logger.error('Failed to spawn Claude Code', { error: err.message });
+          resolve({ success: false, output });
+        }
       });
     });
   }

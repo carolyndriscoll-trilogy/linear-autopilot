@@ -7,6 +7,7 @@ export const RETRY_DELAY_MS = 1000;
 
 // Agent timeouts
 export const STUCK_THRESHOLD_MS = parseInt(process.env.AGENT_STUCK_THRESHOLD_MS || '600000', 10);
+export const AGENT_TIMEOUT_MS = parseInt(process.env.AGENT_TIMEOUT_MS || '1800000', 10); // 30 minutes
 
 // Spawner intervals
 export const SPAWNER_POLL_INTERVAL_MS = 2000;
