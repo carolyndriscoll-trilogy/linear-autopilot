@@ -5,7 +5,7 @@ import { fetchTicket, graphql, LinearTicket } from '../linear';
 import { ticketQueue } from '../spawner/queue';
 import { logger } from '../logger';
 
-const AGENT_READY_LABEL = 'agent-ready';
+const DEFAULT_TRIGGER_LABEL = 'agent-ready';
 
 interface LinearWebhookPayload {
   action: string;
@@ -83,23 +83,28 @@ async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> 
 
   const issueId = payload.data.identifier || payload.data.id;
 
-  // Check if agent-ready label was just added
+  // Look up tenant early to get configurable trigger label
+  const teamId = payload.data.teamId;
+  const earlyTenant = teamId ? getTenantByTeamId(teamId) : undefined;
+  const triggerLabel = earlyTenant?.triggerLabel || DEFAULT_TRIGGER_LABEL;
+
+  // Check if the trigger label was just added
   const currentLabels = payload.data.labelIds || [];
   const previousLabels = payload.updatedFrom?.labelIds || [];
 
-  const wasLabelAdded = await checkAgentReadyLabelAdded(currentLabels, previousLabels);
+  const wasLabelAdded = await checkTriggerLabelAdded(currentLabels, previousLabels, triggerLabel);
 
   if (!wasLabelAdded) {
     return;
   }
 
-  logger.info('Agent-ready label detected', { ticketId: issueId });
+  logger.info('Trigger label detected', { ticketId: issueId, triggerLabel });
 
   // Fetch full ticket details
   const ticket = await fetchTicket(issueId);
 
-  // Get tenant config for this team
-  const tenant = getTenantByTeamId(ticket.team.id);
+  // Resolve tenant (use early lookup or fetch from ticket's team)
+  const tenant = earlyTenant || getTenantByTeamId(ticket.team.id);
 
   if (!tenant) {
     logger.warn('No tenant config for team, skipping', {
@@ -114,16 +119,17 @@ async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> 
   ticketQueue.enqueue(ticket, tenant);
 }
 
-async function checkAgentReadyLabelAdded(
+async function checkTriggerLabelAdded(
   currentLabelIds: string[],
-  previousLabelIds: string[]
+  previousLabelIds: string[],
+  triggerLabel: string
 ): Promise<boolean> {
   // Find labels that are new
   const newLabelIds = currentLabelIds.filter((id) => !previousLabelIds.includes(id));
 
   if (newLabelIds.length === 0) return false;
 
-  // Fetch label names to check if any is "agent-ready"
+  // Fetch label names to check if any matches the trigger label
   try {
     const data = await graphql<LinearLabelsResponse>(
       `
@@ -141,7 +147,7 @@ async function checkAgentReadyLabelAdded(
     );
 
     const labels = data.data?.issueLabels?.nodes || [];
-    return labels.some((label) => label.name.toLowerCase() === AGENT_READY_LABEL);
+    return labels.some((label) => label.name.toLowerCase() === triggerLabel.toLowerCase());
   } catch (error) {
     logger.error('Error fetching labels', { error: String(error) });
     return false;
@@ -200,7 +206,9 @@ export class PollingWatcher {
       };
     }
 
-    // Fetch issues with agent-ready label (uses shared graphql with rate limiting & retries)
+    const triggerLabel = tenant.triggerLabel || DEFAULT_TRIGGER_LABEL;
+
+    // Fetch issues with trigger label (uses shared graphql with rate limiting & retries)
     const data = await graphql<PollResponse>(
       `
         query GetAgentReadyIssues($teamId: String!, $labelName: String!) {
@@ -230,7 +238,7 @@ export class PollingWatcher {
           }
         }
       `,
-      { teamId, labelName: AGENT_READY_LABEL },
+      { teamId, labelName: triggerLabel },
       'GetAgentReadyIssues'
     );
 

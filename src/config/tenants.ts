@@ -15,6 +15,7 @@ export interface TenantConfig {
   repoPath: string;
   maxConcurrentAgents: number;
   githubRepo: string;
+  triggerLabel?: string;
   notifications?: NotificationConfig[];
 }
 
@@ -64,6 +65,12 @@ function validateTenant(tenant: unknown, index: number): TenantConfig | null {
 
   if (typeof t.githubRepo !== 'string' || !GITHUB_REPO_PATTERN.test(t.githubRepo)) {
     errors.push('githubRepo must be in "owner/repo" format');
+  }
+
+  if (t.triggerLabel !== undefined) {
+    if (typeof t.triggerLabel !== 'string' || !t.triggerLabel.trim()) {
+      errors.push('triggerLabel must be a non-empty string if provided');
+    }
   }
 
   if (t.notifications !== undefined) {

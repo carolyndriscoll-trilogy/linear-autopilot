@@ -298,6 +298,58 @@ describe('Tenants Config', () => {
       expect(getAllTenants()).toHaveLength(1);
     });
 
+    it('should accept tenants with custom triggerLabel', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'custom-label',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            triggerLabel: 'autopilot',
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      const tenants = getAllTenants();
+      expect(tenants).toHaveLength(1);
+      expect(tenants[0].triggerLabel).toBe('autopilot');
+    });
+
+    it('should exclude tenants with empty triggerLabel', () => {
+      const mockTenants = {
+        tenants: [
+          {
+            name: 'empty-label',
+            linearTeamId: 'team-1',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            triggerLabel: '',
+          },
+          {
+            name: 'whitespace-label',
+            linearTeamId: 'team-2',
+            repoPath: '/',
+            maxConcurrentAgents: 1,
+            githubRepo: 'o/r',
+            triggerLabel: '   ',
+          },
+        ],
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(mockTenants));
+
+      reloadTenants();
+      expect(getAllTenants()).toHaveLength(0);
+    });
+
     it('should exclude tenants with invalid notification type', () => {
       const mockTenants = {
         tenants: [
