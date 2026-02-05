@@ -4,6 +4,7 @@ dist
 tenants.json
 data/
 coverage
+.linear-autopilot/
 
 # Compiled files outside dist
 *.js
