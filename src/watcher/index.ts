@@ -51,6 +51,10 @@ export function createWebhookRouter(): express.Router {
           res.status(401).json({ error: 'Invalid signature' });
           return;
         }
+      } else if (process.env.ALLOW_UNSIGNED_WEBHOOKS !== 'true') {
+        logger.warn('Rejected unsigned webhook: LINEAR_WEBHOOK_SECRET not configured');
+        res.status(401).json({ error: 'Webhook signature verification not configured' });
+        return;
       }
 
       try {

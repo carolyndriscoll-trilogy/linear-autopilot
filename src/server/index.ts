@@ -28,6 +28,18 @@ export async function startServer(): Promise<void> {
     port: PORT,
   });
 
+  if (!process.env.LINEAR_WEBHOOK_SECRET && POLLING_INTERVAL === 0) {
+    if (process.env.ALLOW_UNSIGNED_WEBHOOKS === 'true') {
+      logger.warn(
+        'LINEAR_WEBHOOK_SECRET not set — webhook signature verification disabled. Do not use in production.'
+      );
+    } else {
+      logger.warn(
+        'LINEAR_WEBHOOK_SECRET not set — all webhooks will be rejected. Set LINEAR_WEBHOOK_SECRET or ALLOW_UNSIGNED_WEBHOOKS=true for local dev.'
+      );
+    }
+  }
+
   const app = express();
 
   // Health check endpoint
