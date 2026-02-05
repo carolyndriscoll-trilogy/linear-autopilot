@@ -19,6 +19,7 @@ import { recordCompletion } from '../dashboard';
 import {
   STUCK_THRESHOLD_MS,
   AGENT_TIMEOUT_MS,
+  GIT_TIMEOUT_MS,
   MAX_RETRIES,
   SPAWNER_POLL_INTERVAL_MS,
   SPAWNER_HEALTH_CHECK_INTERVAL_MS,
@@ -338,6 +339,7 @@ class Spawner {
       const result = execFileSync('git', ['diff', '--name-only', `main...${branchName}`], {
         cwd: repoPath,
         encoding: 'utf-8',
+        timeout: GIT_TIMEOUT_MS.local,
       });
       return result.trim().split('\n').filter(Boolean);
     } catch {
@@ -394,8 +396,16 @@ class Spawner {
 
   private cleanupBranch(repoPath: string, branchName: string): void {
     try {
-      execFileSync('git', ['checkout', 'main'], { cwd: repoPath, stdio: 'pipe' });
-      execFileSync('git', ['branch', '-D', branchName], { cwd: repoPath, stdio: 'pipe' });
+      execFileSync('git', ['checkout', 'main'], {
+        cwd: repoPath,
+        stdio: 'pipe',
+        timeout: GIT_TIMEOUT_MS.local,
+      });
+      execFileSync('git', ['branch', '-D', branchName], {
+        cwd: repoPath,
+        stdio: 'pipe',
+        timeout: GIT_TIMEOUT_MS.local,
+      });
     } catch {
       logger.debug('Branch cleanup skipped (branch may not exist)', { branchName });
     }
@@ -412,6 +422,7 @@ class Spawner {
       const diffResult = execFileSync('git', ['log', `main..${branchName}`, '--oneline'], {
         cwd: tenant.repoPath,
         encoding: 'utf-8',
+        timeout: GIT_TIMEOUT_MS.local,
       }).trim();
 
       if (!diffResult) {
@@ -423,6 +434,7 @@ class Spawner {
       execFileSync('git', ['push', '-u', 'origin', branchName], {
         cwd: tenant.repoPath,
         stdio: 'pipe',
+        timeout: GIT_TIMEOUT_MS.push,
       });
 
       // Build validation section if available
@@ -463,6 +475,7 @@ Linear: ${ticket.identifier}
         {
           cwd: tenant.repoPath,
           encoding: 'utf-8',
+          timeout: GIT_TIMEOUT_MS.ghPrCreate,
         }
       ).trim();
 

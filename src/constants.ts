@@ -13,6 +13,14 @@ export const AGENT_TIMEOUT_MS = parseInt(process.env.AGENT_TIMEOUT_MS || '180000
 export const SPAWNER_POLL_INTERVAL_MS = 2000;
 export const SPAWNER_HEALTH_CHECK_INTERVAL_MS = 60000;
 
+// Git operation timeouts
+const GIT_TIMEOUT_BASE = parseInt(process.env.GIT_OPERATION_TIMEOUT_MS || '30000', 10);
+export const GIT_TIMEOUT_MS = {
+  local: GIT_TIMEOUT_BASE, // git diff, git log, git branch, git checkout: 30s
+  push: GIT_TIMEOUT_BASE * 4, // git push: 2 minutes
+  ghPrCreate: GIT_TIMEOUT_BASE * 2, // gh pr create: 1 minute
+} as const;
+
 // Validation
 export const VALIDATION_TIMEOUT_MS = 300000; // 5 minutes
 
