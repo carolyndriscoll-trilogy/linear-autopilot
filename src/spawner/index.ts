@@ -29,6 +29,55 @@ function sanitizeBranchName(name: string): string {
   return name.replace(/[^a-zA-Z0-9\-_/.]/g, '');
 }
 
+// Minimal environment for Claude subprocess — avoids leaking credentials
+const ALLOWED_ENV_VARS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'LANG',
+  'TERM',
+  'TMPDIR',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+  'AWS_REGION',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'AWS_PROFILE',
+  'CLOUD_ML_REGION',
+  'ANTHROPIC_MODEL',
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+];
+
+function buildSubprocessEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of ALLOWED_ENV_VARS) {
+    if (process.env[key]) {
+      env[key] = process.env[key] as string;
+    }
+  }
+  // Include any explicitly allowlisted vars via config
+  const extra = process.env.CLAUDE_SUBPROCESS_ENV_ALLOWLIST;
+  if (extra) {
+    for (const key of extra
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean)) {
+      if (process.env[key]) {
+        env[key] = process.env[key] as string;
+      }
+    }
+  }
+  return env;
+}
+
 interface ActiveAgent {
   ticket: LinearTicket;
   tenant: TenantConfig;
@@ -194,7 +243,7 @@ class Spawner {
       const claude = spawn('claude', ['-p', '--dangerously-skip-permissions', prompt], {
         cwd: repoPath,
         stdio: ['inherit', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: buildSubprocessEnv(),
       });
 
       let output = '';
