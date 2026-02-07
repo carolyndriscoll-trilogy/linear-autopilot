@@ -23,6 +23,7 @@ import {
   MAX_RETRIES,
   SPAWNER_POLL_INTERVAL_MS,
   SPAWNER_HEALTH_CHECK_INTERVAL_MS,
+  SIGKILL_GRACE_MS,
 } from '../constants';
 
 function sanitizeBranchName(name: string): string {
@@ -267,7 +268,14 @@ class Spawner {
           logger.error('Claude Code timed out', {
             timeoutMs: AGENT_TIMEOUT_MS,
           });
-          claude.kill();
+          claude.kill('SIGTERM');
+          // Escalate to SIGKILL if process doesn't exit
+          setTimeout(() => {
+            if (!claude.killed) {
+              logger.warn('Claude process did not exit after SIGTERM, sending SIGKILL');
+              claude.kill('SIGKILL');
+            }
+          }, SIGKILL_GRACE_MS);
           resolve({ success: false, output, timedOut: true });
         }
       }, AGENT_TIMEOUT_MS);

@@ -24,6 +24,9 @@ export const GIT_TIMEOUT_MS = {
 // Validation
 export const VALIDATION_TIMEOUT_MS = 300000; // 5 minutes
 
+// Kill escalation grace period (SIGTERM -> SIGKILL)
+export const SIGKILL_GRACE_MS = 5000;
+
 // Notification colors (hex)
 export const COLORS = {
   success: '#22c55e', // green

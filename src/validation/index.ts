@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../logger';
-import { VALIDATION_TIMEOUT_MS } from '../constants';
+import { VALIDATION_TIMEOUT_MS, SIGKILL_GRACE_MS } from '../constants';
 import { ValidationConfig } from '../config/tenants';
 
 export interface ValidationResult {
@@ -67,7 +67,14 @@ async function runCommand(
     });
 
     const timer = setTimeout(() => {
-      child.kill();
+      child.kill('SIGTERM');
+      // Escalate to SIGKILL if process doesn't exit
+      setTimeout(() => {
+        if (!child.killed) {
+          logger.warn('Validation process did not exit after SIGTERM, sending SIGKILL', { name });
+          child.kill('SIGKILL');
+        }
+      }, SIGKILL_GRACE_MS);
       const duration = Date.now() - startTime;
       resolve({
         name,
