@@ -87,6 +87,11 @@ interface ActiveAgent {
   notifiedStuck: boolean;
 }
 
+type PrCreationResult =
+  | { status: 'created'; url: string }
+  | { status: 'no-commits' }
+  | { status: 'failed'; error: string };
+
 class Spawner {
   private activeAgents: Map<string, ActiveAgent> = new Map();
   private isRunning = false;
@@ -358,24 +363,47 @@ class Spawner {
     duration: number,
     validation: import('../validation').ValidationSummary
   ): Promise<void> {
-    const prUrl = await this.createPullRequest(tenant, branchName, ticket, validation);
+    const prResult = await this.createPullRequest(tenant, branchName, ticket, validation);
 
-    if (prUrl) {
-      await notify(createPrCreatedEvent(ticket, tenant, branchName, prUrl));
+    if (prResult.status === 'created') {
+      await notify(createPrCreatedEvent(ticket, tenant, branchName, prResult.url));
       await addComment(
         ticket,
-        `✅ Implementation complete!\n\nPR: ${prUrl}\n\n${formatValidationSummary(validation)}`
+        `✅ Implementation complete!\n\nPR: ${prResult.url}\n\n${formatValidationSummary(validation)}`
       );
       await updateTicketStatus(ticket, 'In Review');
       logger.info('Created PR and moved ticket to In Review', {
         ticketId: ticket.identifier,
-        prUrl,
+        prUrl: prResult.url,
       });
-      recordCompletion(ticket.identifier, tenant.name, duration, prUrl);
-    } else {
+      recordCompletion(ticket.identifier, tenant.name, duration, prResult.url);
+    } else if (prResult.status === 'no-commits') {
       await updateTicketStatus(ticket, 'Done');
-      logger.info('Marked ticket as Done (no PR needed)', { ticketId: ticket.identifier });
+      logger.info('Marked ticket as Done (no commits on branch)', { ticketId: ticket.identifier });
       recordCompletion(ticket.identifier, tenant.name, duration);
+    } else {
+      // PR creation failed — notify user and leave ticket for manual attention
+      await addComment(
+        ticket,
+        `⚠️ Implementation complete but PR creation failed.\n\nBranch: \`${branchName}\`\nError: ${prResult.error}\n\nPlease create the PR manually or investigate the error.`
+      );
+      await notify(
+        createAgentFailedEvent(
+          ticket,
+          tenant,
+          branchName,
+          `PR creation failed: ${prResult.error}`,
+          1,
+          1
+        )
+      );
+      logger.error('PR creation failed, ticket needs manual attention', {
+        ticketId: ticket.identifier,
+        branchName,
+        error: prResult.error,
+      });
+      // Don't record as completion since it needs attention
+      return;
     }
 
     await notify(createAgentCompletedEvent(ticket, tenant, branchName, duration));
@@ -478,7 +506,7 @@ class Spawner {
     branchName: string,
     ticket: LinearTicket,
     validation?: import('../validation').ValidationSummary
-  ): Promise<string | null> {
+  ): Promise<PrCreationResult> {
     try {
       // Check if there are commits on the branch
       const diffResult = execFileSync('git', ['log', `main..${branchName}`, '--oneline'], {
@@ -489,7 +517,7 @@ class Spawner {
 
       if (!diffResult) {
         logger.debug('No commits on branch, skipping PR creation', { branchName });
-        return null;
+        return { status: 'no-commits' };
       }
 
       // Push branch to remote
@@ -542,14 +570,15 @@ Linear: ${ticket.identifier}
       ).trim();
 
       logger.info('Created PR', { prUrl: prResult, branchName, ticketId: ticket.identifier });
-      return prResult;
+      return { status: 'created', url: prResult };
     } catch (error) {
+      const errorMessage = String(error);
       logger.error('Failed to create PR', {
         branchName,
         ticketId: ticket.identifier,
-        error: String(error),
+        error: errorMessage,
       });
-      return null;
+      return { status: 'failed', error: errorMessage };
     }
   }
 

@@ -383,11 +383,14 @@ describe('Spawner', () => {
       completeAgent(0);
       await spawnPromise;
 
-      // PR creation failed, ticket should still be marked Done
-      expect(mockUpdateTicketStatus).toHaveBeenCalledWith(
+      // PR creation failed - should add comment explaining the failure
+      expect(mockAddComment).toHaveBeenCalledWith(
         expect.objectContaining({ identifier: 'PRFAIL-1' }),
-        'Done'
+        expect.stringContaining('PR creation failed')
       );
+
+      // Should notify about the failure
+      expect(mockNotify).toHaveBeenCalled();
     });
 
     it('should add comment with PR URL on success', async () => {
