@@ -109,11 +109,16 @@ class Spawner {
     if (this.isRunning) return;
     this.isRunning = true;
     logger.info('Spawner started');
-    this.pollInterval = setInterval(() => this.processQueue(), SPAWNER_POLL_INTERVAL_MS);
-    this.healthCheckInterval = setInterval(
-      () => this.checkStuckAgents(),
-      SPAWNER_HEALTH_CHECK_INTERVAL_MS
-    );
+    this.pollInterval = setInterval(() => {
+      this.processQueue().catch((err) => {
+        logger.error('processQueue failed', { error: String(err) });
+      });
+    }, SPAWNER_POLL_INTERVAL_MS);
+    this.healthCheckInterval = setInterval(() => {
+      this.checkStuckAgents().catch((err) => {
+        logger.error('checkStuckAgents failed', { error: String(err) });
+      });
+    }, SPAWNER_HEALTH_CHECK_INTERVAL_MS);
   }
 
   stop(): void {

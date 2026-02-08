@@ -170,8 +170,15 @@ export class PollingWatcher {
 
   start(): void {
     logger.info('Polling watcher started', { intervalMs: this.intervalMs });
-    this.poll(); // Initial poll
-    this.pollTimer = setInterval(() => this.poll(), this.intervalMs);
+    // Initial poll with error handling
+    this.poll().catch((err) => {
+      logger.error('Initial poll failed', { error: String(err) });
+    });
+    this.pollTimer = setInterval(() => {
+      this.poll().catch((err) => {
+        logger.error('Poll failed', { error: String(err) });
+      });
+    }, this.intervalMs);
   }
 
   stop(): void {
