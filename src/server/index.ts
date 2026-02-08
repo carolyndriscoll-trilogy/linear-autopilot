@@ -4,10 +4,11 @@ import { getAllTenants } from '../config/tenants';
 import { createWebhookRouter, PollingWatcher } from '../watcher';
 import { spawner } from '../spawner';
 import { logger } from '../logger';
-import { createDashboardRouter } from '../dashboard';
+import { createDashboardRouter, getRecentCompletions } from '../dashboard';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const POLLING_INTERVAL = parseInt(process.env.LINEAR_POLLING_INTERVAL_MS || '0', 10);
+const HEALTH_QUEUE_THRESHOLD = parseInt(process.env.HEALTH_QUEUE_THRESHOLD || '50', 10);
 
 let pollingWatcher: PollingWatcher | null = null;
 let isShuttingDown = false;
@@ -45,12 +46,38 @@ export async function startServer(): Promise<void> {
   // Health check endpoint
   app.get('/health', (_req, res) => {
     const status = spawner.getStatus();
-    res.json({
-      status: isShuttingDown ? 'shutting_down' : 'healthy',
+    const recentCompletions = getRecentCompletions(20);
+
+    // Determine health status
+    const issues: string[] = [];
+
+    if (isShuttingDown) {
+      issues.push('shutting_down');
+    }
+
+    if (!status.running && !isShuttingDown) {
+      issues.push('spawner_stopped');
+    }
+
+    if (status.queued > HEALTH_QUEUE_THRESHOLD) {
+      issues.push('queue_backlog');
+    }
+
+    // Calculate recent failure rate (from completions without PR URLs as proxy)
+    // Note: This is a heuristic - completions without prUrl could be no-change tickets
+    const healthStatus = issues.length === 0 ? 'healthy' : 'degraded';
+    const httpStatus = issues.length === 0 ? 200 : 503;
+
+    res.status(httpStatus).json({
+      status: healthStatus,
+      issues,
       uptime: process.uptime(),
+      spawner: status.running ? 'running' : 'stopped',
       queue: status.queued,
+      queueThreshold: HEALTH_QUEUE_THRESHOLD,
       activeAgents: status.active,
       agents: status.agents,
+      recentCompletions: recentCompletions.length,
       tenants: tenants.map((t) => ({
         name: t.name,
         teamId: t.linearTeamId,

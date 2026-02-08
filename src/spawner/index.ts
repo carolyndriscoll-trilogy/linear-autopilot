@@ -582,11 +582,12 @@ Linear: ${ticket.identifier}
     }
   }
 
-  getStatus(): { active: number; queued: number; agents: string[] } {
+  getStatus(): { active: number; queued: number; agents: string[]; running: boolean } {
     return {
       active: this.activeAgents.size,
       queued: ticketQueue.size(),
       agents: Array.from(this.activeAgents.keys()),
+      running: this.isRunning,
     };
   }
 
