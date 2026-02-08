@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../logger';
 import { MEMORY_LIMITS } from '../constants';
+import { atomicWriteFileSync } from '../utils';
 
 // Error categories for smarter learning
 export type ErrorCategory =
@@ -109,11 +110,6 @@ export function getMemory(repoPath: string): RepoMemory {
 
 export function saveMemory(repoPath: string, memory: RepoMemory): void {
   const memoryPath = getMemoryPath(repoPath);
-  const memoryDir = dirname(memoryPath);
-
-  if (!existsSync(memoryDir)) {
-    mkdirSync(memoryDir, { recursive: true });
-  }
 
   const data: MemoryFile = {
     patterns: memory.patterns,
@@ -127,7 +123,7 @@ export function saveMemory(repoPath: string, memory: RepoMemory): void {
     failedTickets: memory.failedTickets,
   };
 
-  writeFileSync(memoryPath, JSON.stringify(data, null, 2));
+  atomicWriteFileSync(memoryPath, JSON.stringify(data, null, 2));
 }
 
 export interface SessionLearnings {

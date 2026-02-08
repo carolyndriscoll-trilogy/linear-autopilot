@@ -1,6 +1,9 @@
 // src/utils.ts
 // Shared utility functions
 
+import { writeFileSync, renameSync, mkdirSync, existsSync } from 'fs';
+import { dirname, join } from 'path';
+
 /**
  * Format milliseconds into a human-readable duration string
  */
@@ -49,4 +52,19 @@ export function sleep(ms: number): Promise<void> {
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
   return str.slice(0, maxLength - 3) + '...';
+}
+
+/**
+ * Write file atomically by writing to a temp file first, then renaming.
+ * This prevents data corruption if the process crashes mid-write.
+ */
+export function atomicWriteFileSync(filePath: string, content: string): void {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const tempPath = join(dir, `.${Date.now()}.${process.pid}.tmp`);
+  writeFileSync(tempPath, content);
+  renameSync(tempPath, filePath);
 }

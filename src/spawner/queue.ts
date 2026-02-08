@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
 import { LinearTicket } from '../linear';
 import { TenantConfig } from '../config/tenants';
 import { logger } from '../logger';
 import { MAX_RETRIES } from '../constants';
+import { atomicWriteFileSync } from '../utils';
 
 export interface QueuedTicket {
   ticket: LinearTicket;
@@ -110,11 +111,6 @@ class TicketQueue {
 
   private persistQueue(): void {
     try {
-      const dir = dirname(this.queueFilePath);
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-
       const serialized: SerializedQueuedTicket[] = this.queue.map((item) => ({
         ticket: item.ticket,
         tenant: item.tenant,
@@ -122,7 +118,7 @@ class TicketQueue {
         attempts: item.attempts,
       }));
 
-      writeFileSync(this.queueFilePath, JSON.stringify(serialized, null, 2));
+      atomicWriteFileSync(this.queueFilePath, JSON.stringify(serialized, null, 2));
     } catch (error) {
       logger.error('Failed to persist queue', { error: String(error) });
     }

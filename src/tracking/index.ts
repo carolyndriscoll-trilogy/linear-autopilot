@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../logger';
+import { atomicWriteFileSync } from '../utils';
 
 export interface CostRecord {
   ticketId: string;
@@ -49,14 +50,8 @@ function loadCosts(repoPath: string): CostRecord[] {
 
 function saveCosts(repoPath: string, records: CostRecord[]): void {
   const costsPath = getCostsPath(repoPath);
-  const costsDir = dirname(costsPath);
-
-  if (!existsSync(costsDir)) {
-    mkdirSync(costsDir, { recursive: true });
-  }
-
   const data: CostFile = { records };
-  writeFileSync(costsPath, JSON.stringify(data, null, 2));
+  atomicWriteFileSync(costsPath, JSON.stringify(data, null, 2));
 }
 
 // Parse token usage from Claude Code output

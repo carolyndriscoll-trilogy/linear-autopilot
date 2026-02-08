@@ -1,11 +1,11 @@
 import express, { Router, Request, Response } from 'express';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { spawner } from '../spawner';
 import { ticketQueue } from '../spawner/queue';
 import { getAllTenants } from '../config/tenants';
 import { getCostSummary, CostRecord } from '../tracking';
-import { formatDuration, formatUptime } from '../utils';
+import { formatDuration, formatUptime, atomicWriteFileSync } from '../utils';
 import { renderDashboard } from './template';
 import { logger } from '../logger';
 
@@ -38,11 +38,7 @@ function loadCompletions(): CompletionRecord[] {
 
 function saveCompletions(records: CompletionRecord[]): void {
   try {
-    const dir = dirname(completionsPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(completionsPath, JSON.stringify(records, null, 2));
+    atomicWriteFileSync(completionsPath, JSON.stringify(records, null, 2));
   } catch (error) {
     logger.error('Failed to persist completions', { error: String(error) });
   }
