@@ -187,7 +187,20 @@ export function getAllTenants(): TenantConfig[] {
   return loadTenants();
 }
 
-export function reloadTenants(): void {
+export function reloadTenants(): TenantConfig[] {
   tenantsCache = null;
-  loadTenants();
+  const reloaded = loadTenants();
+
+  if (reloaded.length === 0) {
+    logger.error('Tenant reload resulted in zero valid tenants!', {
+      path: process.env.TENANTS_CONFIG_PATH || join(process.cwd(), 'tenants.json'),
+    });
+  } else {
+    logger.info('Tenants reloaded successfully', {
+      count: reloaded.length,
+      tenants: reloaded.map((t) => t.name),
+    });
+  }
+
+  return reloaded;
 }
