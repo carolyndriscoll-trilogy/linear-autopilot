@@ -119,6 +119,12 @@ async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> 
     return;
   }
 
+  // Check if recently processed (prevents duplicates across restarts)
+  if (ticketQueue.wasRecentlyProcessed(ticket.identifier)) {
+    logger.debug('Ticket was recently processed, skipping', { ticketId: ticket.identifier });
+    return;
+  }
+
   // Queue the ticket
   ticketQueue.enqueue(ticket, tenant);
 }
@@ -256,9 +262,14 @@ export class PollingWatcher {
     const issues = data.data?.team?.issues?.nodes || [];
 
     for (const issue of issues) {
-      // Skip if already queued or processed recently
+      // Skip if already queued or processed recently (in-memory check)
       const lastCheck = this.lastChecked.get(issue.identifier);
       if (lastCheck && Date.now() - lastCheck.getTime() < this.intervalMs * 2) {
+        continue;
+      }
+
+      // Skip if recently processed (persistent check across restarts)
+      if (ticketQueue.wasRecentlyProcessed(issue.identifier)) {
         continue;
       }
 

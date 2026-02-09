@@ -23,6 +23,19 @@ interface SerializedQueuedTicket {
 const TRACKING_DIR = '.linear-autopilot';
 const QUEUE_FILE = 'queue.json';
 const DEADLETTER_FILE = 'deadletter.json';
+const PROCESSED_FILE = 'processed.json';
+
+// Default 24 hours for duplicate prevention window
+const PROCESSED_RETENTION_MS = parseInt(process.env.PROCESSED_RETENTION_MS || '86400000', 10);
+
+interface ProcessedEntry {
+  ticketId: string;
+  processedAt: string;
+}
+
+interface ProcessedFile {
+  entries: ProcessedEntry[];
+}
 
 export interface DeadletterEntry {
   ticketId: string;
@@ -41,10 +54,12 @@ class TicketQueue {
   private queue: QueuedTicket[] = [];
   private queueFilePath: string;
   private deadletterFilePath: string;
+  private processedFilePath: string;
 
   constructor() {
     this.queueFilePath = join(process.cwd(), TRACKING_DIR, QUEUE_FILE);
     this.deadletterFilePath = join(process.cwd(), TRACKING_DIR, DEADLETTER_FILE);
+    this.processedFilePath = join(process.cwd(), TRACKING_DIR, PROCESSED_FILE);
     this.loadQueue();
   }
 
@@ -146,6 +161,46 @@ class TicketQueue {
 
   getDeadletter(): DeadletterEntry[] {
     return this.loadDeadletter();
+  }
+
+  wasRecentlyProcessed(ticketId: string): boolean {
+    const processed = this.loadProcessed();
+    const cutoff = Date.now() - PROCESSED_RETENTION_MS;
+
+    return processed.some(
+      (entry) => entry.ticketId === ticketId && new Date(entry.processedAt).getTime() > cutoff
+    );
+  }
+
+  markAsProcessed(ticketId: string): void {
+    try {
+      const processed = this.loadProcessed();
+      const cutoff = Date.now() - PROCESSED_RETENTION_MS;
+
+      // Clean up old entries and add new one
+      const filtered = processed.filter((entry) => new Date(entry.processedAt).getTime() > cutoff);
+      filtered.push({
+        ticketId,
+        processedAt: new Date().toISOString(),
+      });
+
+      atomicWriteFileSync(this.processedFilePath, JSON.stringify({ entries: filtered }, null, 2));
+    } catch (error) {
+      logger.error('Failed to mark ticket as processed', { ticketId, error: String(error) });
+    }
+  }
+
+  private loadProcessed(): ProcessedEntry[] {
+    try {
+      if (!existsSync(this.processedFilePath)) {
+        return [];
+      }
+      const content = readFileSync(this.processedFilePath, 'utf-8');
+      const data = JSON.parse(content) as ProcessedFile;
+      return data.entries || [];
+    } catch {
+      return [];
+    }
   }
 
   clear(): void {

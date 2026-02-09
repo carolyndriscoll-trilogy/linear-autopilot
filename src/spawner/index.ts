@@ -186,6 +186,9 @@ class Spawner {
     const dequeued = ticketQueue.dequeue();
     if (!dequeued) return;
 
+    // Mark as processed immediately to prevent duplicates across restarts
+    ticketQueue.markAsProcessed(dequeued.ticket.identifier);
+
     await this.spawnAgent(dequeued);
   }
 
