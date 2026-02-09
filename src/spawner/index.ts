@@ -59,11 +59,26 @@ const ALLOWED_ENV_VARS = [
 
 function buildSubprocessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
+
   for (const key of ALLOWED_ENV_VARS) {
-    if (process.env[key]) {
-      env[key] = process.env[key] as string;
+    const value = process.env[key];
+    // Skip empty strings - they can cause issues with credential validation
+    if (value && value.trim()) {
+      env[key] = value;
     }
   }
+
+  // Validate AWS credential completeness if using Bedrock
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === 'true') {
+    const awsVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION'];
+    const present = awsVars.filter((k) => env[k]);
+    const missing = awsVars.filter((k) => !env[k]);
+    // Warn if partially configured (some but not all)
+    if (present.length > 0 && missing.length > 0) {
+      logger.warn('Incomplete AWS credentials for Bedrock mode', { present, missing });
+    }
+  }
+
   // Include any explicitly allowlisted vars via config
   const extra = process.env.CLAUDE_SUBPROCESS_ENV_ALLOWLIST;
   if (extra) {
@@ -71,11 +86,18 @@ function buildSubprocessEnv(): Record<string, string> {
       .split(',')
       .map((k) => k.trim())
       .filter(Boolean)) {
-      if (process.env[key]) {
-        env[key] = process.env[key] as string;
+      // Validate env var name format
+      if (!/^[A-Z_][A-Z0-9_]*$/i.test(key)) {
+        logger.warn('Invalid env var name in allowlist, skipping', { key });
+        continue;
+      }
+      const value = process.env[key];
+      if (value && value.trim()) {
+        env[key] = value;
       }
     }
   }
+
   return env;
 }
 
