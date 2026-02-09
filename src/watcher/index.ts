@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import express, { Request, Response } from 'express';
 import { getTenantByTeamId, getAllTenants } from '../config/tenants';
 import { fetchTicket, graphql, LinearTicket } from '../linear';
@@ -78,7 +78,9 @@ function verifyWebhookSignature(body: Buffer, signature: string, secret: string)
   hmac.update(body);
   const expectedSignature = hmac.digest('hex');
 
-  return signature === expectedSignature;
+  // Use constant-time comparison to prevent timing attacks
+  if (signature.length !== expectedSignature.length) return false;
+  return timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
 }
 
 async function handleWebhookEvent(payload: LinearWebhookPayload): Promise<void> {
