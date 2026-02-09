@@ -225,9 +225,17 @@ describe('Notification Providers', () => {
     });
 
     it('should throw error on non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce(
-        new Response('error', { status: 500, statusText: 'Internal Server Error' })
-      );
+      // Mock 3 consecutive 500 errors (all retry attempts)
+      mockFetch
+        .mockResolvedValueOnce(
+          new Response('error', { status: 500, statusText: 'Internal Server Error' })
+        )
+        .mockResolvedValueOnce(
+          new Response('error', { status: 500, statusText: 'Internal Server Error' })
+        )
+        .mockResolvedValueOnce(
+          new Response('error', { status: 500, statusText: 'Internal Server Error' })
+        );
 
       const event = createAgentCompletedEvent();
 
@@ -415,9 +423,11 @@ describe('Notification Providers', () => {
     });
 
     it('should throw error on non-ok response', async () => {
-      mockFetch.mockResolvedValueOnce(
-        new Response('Error', { status: 500, statusText: 'Server Error' })
-      );
+      // Mock 3 consecutive 500 errors (all retry attempts)
+      mockFetch
+        .mockResolvedValueOnce(new Response('Error', { status: 500, statusText: 'Server Error' }))
+        .mockResolvedValueOnce(new Response('Error', { status: 500, statusText: 'Server Error' }))
+        .mockResolvedValueOnce(new Response('Error', { status: 500, statusText: 'Server Error' }));
 
       const event = createAgentStartedEvent();
 

@@ -41,3 +41,9 @@ export const MEMORY_LIMITS = {
   maxErrors: 20,
   maxPatterns: 30,
 } as const;
+
+// Webhook retry configuration
+export const WEBHOOK_RETRY = {
+  maxAttempts: 3,
+  baseDelayMs: 1000, // 1s, 2s, 4s exponential backoff
+} as const;

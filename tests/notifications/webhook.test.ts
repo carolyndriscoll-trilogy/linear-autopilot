@@ -24,16 +24,46 @@ describe('sendWebhook', () => {
     });
   });
 
-  it('should throw error on non-ok response', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: () => Promise.resolve('Internal Server Error'),
-    });
+  it('should throw error on non-ok response after retries for 5xx', async () => {
+    // Mock 3 consecutive 500 errors (all retry attempts)
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal Server Error'),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal Server Error'),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal Server Error'),
+      });
 
     await expect(
       sendWebhook('https://example.com/webhook', { text: 'test' }, 'TestService')
     ).rejects.toThrow('TestService webhook failed: 500 Internal Server Error');
+
+    // Should have tried 3 times
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('should not retry on 4xx client errors', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('Bad Request'),
+    });
+
+    await expect(
+      sendWebhook('https://example.com/webhook', { text: 'test' }, 'TestService')
+    ).rejects.toThrow('TestService webhook failed: 400 Bad Request');
+
+    // Should NOT retry on 4xx
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should handle text() rejection gracefully', async () => {
@@ -69,5 +99,32 @@ describe('sendWebhook', () => {
     await expect(sendWebhook('https://example.com/webhook', {}, 'Discord')).rejects.toThrow(
       'Discord webhook failed'
     );
+  });
+
+  it('should retry on network errors', async () => {
+    // First two attempts fail with network error, third succeeds
+    mockFetch
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce({ ok: true });
+
+    await sendWebhook('https://example.com/webhook', { text: 'test' }, 'TestService');
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('should succeed on retry after initial 5xx failure', async () => {
+    // First attempt fails with 500, second succeeds
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal Server Error'),
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    await sendWebhook('https://example.com/webhook', { text: 'test' }, 'TestService');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
