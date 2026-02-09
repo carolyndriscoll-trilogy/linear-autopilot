@@ -22,10 +22,10 @@ export const GIT_TIMEOUT_MS = {
 } as const;
 
 // Validation
-export const VALIDATION_TIMEOUT_MS = 300000; // 5 minutes
+export const VALIDATION_TIMEOUT_MS = parseInt(process.env.VALIDATION_TIMEOUT_MS || '300000', 10); // 5 minutes
 
 // Kill escalation grace period (SIGTERM -> SIGKILL)
-export const SIGKILL_GRACE_MS = 5000;
+export const SIGKILL_GRACE_MS = parseInt(process.env.SIGKILL_GRACE_MS || '5000', 10);
 
 // Notification colors (hex)
 export const COLORS = {
