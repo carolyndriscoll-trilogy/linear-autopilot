@@ -27,6 +27,8 @@ const PROCESSED_FILE = 'processed.json';
 
 // Default 24 hours for duplicate prevention window
 const PROCESSED_RETENTION_MS = parseInt(process.env.PROCESSED_RETENTION_MS || '86400000', 10);
+// Hard limit to prevent unbounded file growth
+const MAX_PROCESSED_ENTRIES = 10000;
 
 interface ProcessedEntry {
   ticketId: string;
@@ -184,7 +186,10 @@ class TicketQueue {
         processedAt: new Date().toISOString(),
       });
 
-      atomicWriteFileSync(this.processedFilePath, JSON.stringify({ entries: filtered }, null, 2));
+      // Apply hard size limit to prevent unbounded growth
+      const trimmed = filtered.slice(-MAX_PROCESSED_ENTRIES);
+
+      atomicWriteFileSync(this.processedFilePath, JSON.stringify({ entries: trimmed }, null, 2));
     } catch (error) {
       logger.error('Failed to mark ticket as processed', { ticketId, error: String(error) });
     }
