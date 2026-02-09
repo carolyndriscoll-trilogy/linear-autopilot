@@ -9,6 +9,7 @@ import { createDashboardRouter, getRecentCompletions } from '../dashboard';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const POLLING_INTERVAL = parseInt(process.env.LINEAR_POLLING_INTERVAL_MS || '0', 10);
 const HEALTH_QUEUE_THRESHOLD = parseInt(process.env.HEALTH_QUEUE_THRESHOLD || '50', 10);
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS || '60000', 10);
 
 let pollingWatcher: PollingWatcher | null = null;
 let isShuttingDown = false;
@@ -137,11 +138,24 @@ export async function startServer(): Promise<void> {
       process.exit(0);
     });
 
-    // Force exit after 60 seconds
+    // Force exit after timeout
     setTimeout(() => {
-      logger.error('Forced shutdown after timeout');
+      const activeAgents = spawner.getActiveAgents();
+      if (activeAgents.length > 0) {
+        logger.error('Forced shutdown after timeout, killing active agents', {
+          timeoutMs: SHUTDOWN_TIMEOUT_MS,
+          killedAgents: activeAgents.map((a) => ({
+            ticketId: a.ticket.identifier,
+            tenant: a.tenant.name,
+            branchName: a.branchName,
+            runningForMs: Date.now() - a.startedAt.getTime(),
+          })),
+        });
+      } else {
+        logger.error('Forced shutdown after timeout', { timeoutMs: SHUTDOWN_TIMEOUT_MS });
+      }
       process.exit(1);
-    }, 60000);
+    }, SHUTDOWN_TIMEOUT_MS);
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
