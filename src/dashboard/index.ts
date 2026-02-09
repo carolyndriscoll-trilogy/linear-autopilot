@@ -150,6 +150,11 @@ export function createDashboardRouter(): Router {
     );
   });
 
+  router.get('/api/deadletter', (_req: Request, res: Response) => {
+    const deadletter = ticketQueue.getDeadletter();
+    res.json(deadletter);
+  });
+
   // HTML Dashboard
   router.get('/', (_req: Request, res: Response) => {
     const status = spawner.getStatus();

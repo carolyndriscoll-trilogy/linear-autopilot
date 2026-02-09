@@ -475,7 +475,7 @@ class Spawner {
         ticketTitle: ticket.title,
         success: false,
       });
-      ticketQueue.requeue(item);
+      ticketQueue.requeue(item, errorMessage);
     } catch (error) {
       logger.error('Error in failure handling', {
         ticketId: ticket.identifier,

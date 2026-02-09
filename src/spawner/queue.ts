@@ -22,13 +22,29 @@ interface SerializedQueuedTicket {
 
 const TRACKING_DIR = '.linear-autopilot';
 const QUEUE_FILE = 'queue.json';
+const DEADLETTER_FILE = 'deadletter.json';
+
+export interface DeadletterEntry {
+  ticketId: string;
+  ticketTitle: string;
+  tenantName: string;
+  attempts: number;
+  lastError: string;
+  failedAt: string;
+}
+
+interface DeadletterFile {
+  entries: DeadletterEntry[];
+}
 
 class TicketQueue {
   private queue: QueuedTicket[] = [];
   private queueFilePath: string;
+  private deadletterFilePath: string;
 
   constructor() {
     this.queueFilePath = join(process.cwd(), TRACKING_DIR, QUEUE_FILE);
+    this.deadletterFilePath = join(process.cwd(), TRACKING_DIR, DEADLETTER_FILE);
     this.loadQueue();
   }
 
@@ -79,19 +95,57 @@ class TicketQueue {
     return this.queue.filter((q) => q.tenant.linearTeamId === tenantId);
   }
 
-  requeue(item: QueuedTicket): void {
+  requeue(item: QueuedTicket, lastError?: string): void {
     item.attempts++;
     if (item.attempts < MAX_RETRIES) {
       this.queue.push(item);
       logger.info('Requeued ticket', { ticketId: item.ticket.identifier, attempt: item.attempts });
       this.persistQueue();
     } else {
-      logger.warn('Dropped ticket after max attempts', {
+      logger.warn('Moved ticket to deadletter after max attempts', {
         ticketId: item.ticket.identifier,
         attempts: item.attempts,
       });
+      this.addToDeadletter(item, lastError || 'Unknown error');
       this.persistQueue();
     }
+  }
+
+  private addToDeadletter(item: QueuedTicket, lastError: string): void {
+    try {
+      const deadletter = this.loadDeadletter();
+      deadletter.push({
+        ticketId: item.ticket.identifier,
+        ticketTitle: item.ticket.title,
+        tenantName: item.tenant.name,
+        attempts: item.attempts,
+        lastError,
+        failedAt: new Date().toISOString(),
+      });
+
+      // Keep only last 100 entries
+      const trimmed = deadletter.slice(-100);
+      atomicWriteFileSync(this.deadletterFilePath, JSON.stringify({ entries: trimmed }, null, 2));
+    } catch (error) {
+      logger.error('Failed to write to deadletter', { error: String(error) });
+    }
+  }
+
+  private loadDeadletter(): DeadletterEntry[] {
+    try {
+      if (!existsSync(this.deadletterFilePath)) {
+        return [];
+      }
+      const content = readFileSync(this.deadletterFilePath, 'utf-8');
+      const data = JSON.parse(content) as DeadletterFile;
+      return data.entries || [];
+    } catch {
+      return [];
+    }
+  }
+
+  getDeadletter(): DeadletterEntry[] {
+    return this.loadDeadletter();
   }
 
   clear(): void {
