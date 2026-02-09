@@ -158,8 +158,23 @@ export async function startServer(): Promise<void> {
     }, SHUTDOWN_TIMEOUT_MS);
   };
 
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => {
+    shutdown('SIGTERM').catch((err) => {
+      logger.error('Shutdown failed', { error: String(err) });
+      process.exit(1);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    if (isShuttingDown) {
+      logger.warn('Received second interrupt, forcing immediate exit');
+      process.exit(1);
+    }
+    shutdown('SIGINT').catch((err) => {
+      logger.error('Shutdown failed', { error: String(err) });
+      process.exit(1);
+    });
+  });
 }
 
 // Run if called directly
