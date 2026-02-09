@@ -10,6 +10,12 @@ import { whatsappProvider } from './providers/whatsapp';
 
 export * from './types';
 
+export interface NotificationResult {
+  successful: number;
+  failed: number;
+  errors?: string[];
+}
+
 const providers: Record<NotificationType, NotificationProvider> = {
   slack: slackProvider,
   discord: discordProvider,
@@ -22,9 +28,9 @@ const providers: Record<NotificationType, NotificationProvider> = {
 export async function send(
   event: NotificationEvent,
   notifications: NotificationConfig[] | undefined
-): Promise<void> {
+): Promise<NotificationResult> {
   if (!notifications || notifications.length === 0) {
-    return;
+    return { successful: 0, failed: 0 };
   }
 
   const results = await Promise.allSettled(
@@ -33,7 +39,7 @@ export async function send(
 
       if (!provider) {
         logger.warn('Unknown notification provider', { type: notification.type });
-        return;
+        throw new Error(`Unknown provider: ${notification.type}`);
       }
 
       try {
@@ -61,9 +67,15 @@ export async function send(
       reasons: failures.map((f) => String(f.reason)),
     });
   }
+
+  return {
+    successful: notifications.length - failures.length,
+    failed: failures.length,
+    errors: failures.length > 0 ? failures.map((f) => String(f.reason)) : undefined,
+  };
 }
 
-export async function notify(event: NotificationEvent): Promise<void> {
+export async function notify(event: NotificationEvent): Promise<NotificationResult> {
   return send(event, event.tenant.notifications);
 }
 
