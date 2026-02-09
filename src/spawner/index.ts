@@ -255,6 +255,16 @@ class Spawner {
       // Record token usage for cost tracking
       recordUsage(tenant.repoPath, ticket.identifier, result.output, tenant.name);
 
+      // Log execution details for debugging
+      logger.debug('Claude Code execution completed', {
+        ticketId: ticket.identifier,
+        success: result.success,
+        timedOut: result.timedOut || false,
+        durationMs: duration,
+        outputLength: result.output.length,
+        outputTail: result.output.slice(-500), // Last 500 chars most relevant for debugging
+      });
+
       if (result.success) {
         await this.handleSuccess(ticket, tenant, item, branchName, duration);
       } else {
