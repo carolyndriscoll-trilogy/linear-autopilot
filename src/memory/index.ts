@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../logger';
 import { MEMORY_LIMITS } from '../constants';
@@ -81,8 +81,24 @@ function createDefaultMemory(): RepoMemory {
   };
 }
 
+function parseMemoryFile(content: string): RepoMemory {
+  const data = JSON.parse(content) as MemoryFile;
+  return {
+    patterns: data.patterns || [],
+    commonErrors: data.commonErrors || [],
+    fileStructure: data.fileStructure || '',
+    lastUpdated: new Date(data.lastUpdated),
+    categorizedErrors: data.categorizedErrors || [],
+    filePatterns: data.filePatterns || [],
+    validationHistory: data.validationHistory || [],
+    successfulTickets: data.successfulTickets || 0,
+    failedTickets: data.failedTickets || 0,
+  };
+}
+
 export function getMemory(repoPath: string): RepoMemory {
   const memoryPath = getMemoryPath(repoPath);
+  const backupPath = memoryPath + '.backup';
 
   if (!existsSync(memoryPath)) {
     return createDefaultMemory();
@@ -90,26 +106,41 @@ export function getMemory(repoPath: string): RepoMemory {
 
   try {
     const content = readFileSync(memoryPath, 'utf-8');
-    const data = JSON.parse(content) as MemoryFile;
-    return {
-      patterns: data.patterns || [],
-      commonErrors: data.commonErrors || [],
-      fileStructure: data.fileStructure || '',
-      lastUpdated: new Date(data.lastUpdated),
-      categorizedErrors: data.categorizedErrors || [],
-      filePatterns: data.filePatterns || [],
-      validationHistory: data.validationHistory || [],
-      successfulTickets: data.successfulTickets || 0,
-      failedTickets: data.failedTickets || 0,
-    };
+    return parseMemoryFile(content);
   } catch (error) {
-    logger.error('Error reading memory', { repoPath, error: String(error) });
+    logger.error('Error reading memory, attempting backup recovery', {
+      repoPath,
+      error: String(error),
+    });
+
+    // Try to recover from backup
+    if (existsSync(backupPath)) {
+      try {
+        const backupContent = readFileSync(backupPath, 'utf-8');
+        const recovered = parseMemoryFile(backupContent);
+        logger.info('Recovered memory from backup', { repoPath });
+        return recovered;
+      } catch (backupError) {
+        logger.error('Backup also corrupted', { repoPath, error: String(backupError) });
+      }
+    }
+
     return createDefaultMemory();
   }
 }
 
 export function saveMemory(repoPath: string, memory: RepoMemory): void {
   const memoryPath = getMemoryPath(repoPath);
+  const backupPath = memoryPath + '.backup';
+
+  // Create backup before writing (if file exists)
+  if (existsSync(memoryPath)) {
+    try {
+      copyFileSync(memoryPath, backupPath);
+    } catch (error) {
+      logger.warn('Failed to create memory backup', { repoPath, error: String(error) });
+    }
+  }
 
   const data: MemoryFile = {
     patterns: memory.patterns,
