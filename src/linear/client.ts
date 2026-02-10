@@ -37,9 +37,15 @@ interface GraphQLResponse {
   errors?: Array<{ message: string }>;
 }
 
-function checkGraphQLErrors(data: GraphQLResponse): void {
+function checkGraphQLErrors(data: GraphQLResponse, operationName?: string): void {
   if (data.errors && data.errors.length > 0) {
-    throw new Error(`Linear API error: ${data.errors[0].message}`);
+    const errorDetails = data.errors.map((e, i) => `[${i}] ${e.message}`).join('; ');
+    logger.error('Linear GraphQL errors', {
+      operation: operationName,
+      errorCount: data.errors.length,
+      errors: data.errors.map((e) => e.message),
+    });
+    throw new Error(`Linear API error: ${errorDetails}`);
   }
 }
 
@@ -89,6 +95,7 @@ export async function graphql<T extends GraphQLResponse>(
           delayMs,
           error: lastError.message,
           operation: operationName,
+          queryPreview: query.trim().slice(0, 100),
         });
         await sleep(delayMs);
       }
@@ -98,6 +105,7 @@ export async function graphql<T extends GraphQLResponse>(
   logger.error('Linear API request failed after all retries', {
     operation: operationName,
     error: lastError?.message,
+    queryPreview: query.trim().slice(0, 150),
   });
   throw lastError;
 }
@@ -126,7 +134,7 @@ export async function fetchTicket(ticketId: string): Promise<LinearTicket> {
     'GetIssue'
   );
 
-  checkGraphQLErrors(data);
+  checkGraphQLErrors(data, 'GetIssue');
 
   if (!data.data?.issue) {
     throw new Error(`Ticket ${ticketId} not found`);
@@ -150,7 +158,7 @@ export async function updateTicketStatus(ticket: LinearTicket, stateName: string
     'UpdateIssue'
   );
 
-  checkGraphQLErrors(data);
+  checkGraphQLErrors(data, 'UpdateIssue');
 
   if (!data.data?.issueUpdate?.success) {
     throw new Error(`Failed to update ${ticket.identifier} to ${stateName}`);
@@ -170,7 +178,7 @@ export async function addComment(ticket: LinearTicket, body: string): Promise<vo
     'CreateComment'
   );
 
-  checkGraphQLErrors(data);
+  checkGraphQLErrors(data, 'CreateComment');
 
   if (!data.data?.commentCreate?.success) {
     throw new Error(`Failed to add comment to ${ticket.identifier}`);
@@ -193,7 +201,7 @@ export async function createLabel(teamId: string, name: string, color: string): 
     'CreateLabel'
   );
 
-  checkGraphQLErrors(data);
+  checkGraphQLErrors(data, 'CreateLabel');
 
   if (!data.data?.issueLabelCreate?.success || !data.data.issueLabelCreate.issueLabel) {
     throw new Error(`Failed to create label ${name}`);
