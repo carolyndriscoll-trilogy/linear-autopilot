@@ -11,12 +11,15 @@ Linear Autopilot watches your Linear board for tickets labeled `agent-ready`, sp
 - **Autonomous Implementation** — Claude Code agents work on tickets end-to-end: read requirements, write code, run tests, commit changes
 - **Cross-Session Learning** — Agents remember codebase patterns, common errors, and which files to modify for similar tickets
 - **Multi-Tenant Support** — Manage multiple teams and repositories from a single instance
-- **Validation Pipeline** — Automatically runs tests, linting, type checking, and coverage checks before creating PRs
-- **Smart Retries** — Failed tickets are requeued with exponential backoff (up to 3 attempts)
-- **Real-Time Dashboard** — Monitor queue, active agents, completions, and costs at a glance
-- **Flexible Notifications** — Slack, Discord, Email, SMS, WhatsApp, or Google Chat alerts
-- **Cost Tracking** — Track token usage and estimated costs per ticket
+- **Validation Pipeline** — Automatically runs tests, linting, type checking with custom validation scripts support
+- **Smart Retries** — Failed tickets are requeued with exponential backoff (up to 3 attempts), with deadletter queue for persistent failures
+- **Duplicate Prevention** — Tracks processed tickets to prevent re-processing across restarts
+- **Real-Time Dashboard** — Monitor queue, active agents, completions, costs, and deadletter queue
+- **Health Endpoint** — `/health` returns 503 when degraded (queue backlog, spawner stopped)
+- **Flexible Notifications** — Slack, Discord, Email, SMS, WhatsApp, or Google Chat alerts with retry logic
+- **Cost Tracking** — Track token usage and estimated costs per ticket (configurable pricing)
 - **Rate Limiting** — Built-in rate limiting and retry logic for Linear API
+- **Graceful Shutdown** — Waits for active agents to complete with configurable timeout
 - **Structured Logging** — JSON logs with context for easy debugging and monitoring
 - **Docker Ready** — Deploy anywhere with included Dockerfile and docker-compose
 
@@ -35,7 +38,7 @@ Linear Autopilot watches your Linear board for tickets labeled `agent-ready`, sp
                     └─────────────┘
 ```
 
-1. Add the `agent-ready` label to a Linear ticket
+1. Add the trigger label to a Linear ticket (default: `agent-ready`, configurable per-tenant)
 2. Autopilot picks up the ticket via webhook or polling
 3. A Claude Code agent implements the changes on a feature branch
 4. Validation runs (tests, lint, typecheck, coverage)
@@ -63,7 +66,33 @@ npm run dev     # Start in development mode
 
 Open http://localhost:3000/dashboard to view the dashboard.
 
-For detailed setup instructions, see the [Getting Started Guide](docs/getting-started.md).
+### Tenant Configuration
+
+Create a `tenants.json` file:
+
+```json
+[
+  {
+    "name": "my-project",
+    "linearTeamId": "TEAM_UUID",
+    "repoPath": "/path/to/repo",
+    "githubRepo": "owner/repo",
+    "maxConcurrentAgents": 2,
+    "triggerLabel": "agent-ready",
+    "validation": {
+      "steps": [
+        { "name": "tests", "command": "npm", "args": ["test"] },
+        { "name": "lint", "command": "npm", "args": ["run", "lint"] },
+        { "name": "typecheck", "command": "npm", "args": ["run", "typecheck"] }
+      ],
+      "timeoutMs": 300000
+    },
+    "notifications": [
+      { "type": "slack", "config": { "webhookUrl": "https://hooks.slack.com/..." } }
+    ]
+  }
+]
+```
 
 ## Documentation
 
@@ -94,6 +123,26 @@ src/
 ├── validation/      # Test/lint/typecheck pipeline
 └── watcher/         # Webhook and polling handlers
 ```
+
+## Environment Variables
+
+| Variable                     | Default    | Description                                 |
+| ---------------------------- | ---------- | ------------------------------------------- |
+| `LINEAR_API_KEY`             | (required) | Linear API key                              |
+| `LINEAR_WEBHOOK_SECRET`      | (required) | Webhook signature secret                    |
+| `PORT`                       | `3000`     | Server port                                 |
+| `LINEAR_POLLING_INTERVAL_MS` | `0`        | Polling interval (0 = webhook mode)         |
+| `AGENT_TIMEOUT_MS`           | `1800000`  | Agent timeout (30 min)                      |
+| `AGENT_STUCK_THRESHOLD_MS`   | `600000`   | Stuck detection threshold (10 min)          |
+| `VALIDATION_TIMEOUT_MS`      | `300000`   | Validation timeout (5 min)                  |
+| `SHUTDOWN_TIMEOUT_MS`        | `60000`    | Graceful shutdown timeout (60s)             |
+| `SIGKILL_GRACE_MS`           | `5000`     | SIGTERM to SIGKILL escalation (5s)          |
+| `PROCESSED_RETENTION_MS`     | `86400000` | Duplicate prevention window (24h)           |
+| `HEALTH_QUEUE_THRESHOLD`     | `50`       | Queue size for degraded health              |
+| `COST_PER_M_INPUT_TOKENS`    | `3.00`     | Input token cost per million                |
+| `COST_PER_M_OUTPUT_TOKENS`   | `15.00`    | Output token cost per million               |
+| `LINEAR_STATE_CACHE_TTL_MS`  | `3600000`  | State cache TTL (1 hour)                    |
+| `ALLOW_UNSIGNED_WEBHOOKS`    | `false`    | Allow webhooks without signature (dev only) |
 
 ## Development
 
